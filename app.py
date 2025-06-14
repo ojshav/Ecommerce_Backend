@@ -38,6 +38,7 @@ from routes.merchant_support_routes import merchant_support_bp
 from routes.admin_support_routes import admin_support_bp
 from routes.user_support_routes import user_support_bp
 from routes.promotion_routes import superadmin_promotion_bp
+from routes.promo_code_routes import promo_code_bp
 
 from flasgger import Swagger
 from cryptography.fernet import Fernet
@@ -167,6 +168,7 @@ def create_app(config_name='default'):
     
 
     app.register_blueprint(superadmin_promotion_bp)
+    app.register_blueprint(promo_code_bp)
     # Add custom headers to every response
     app.after_request(add_headers)
 
