@@ -4,6 +4,7 @@ from flask_jwt_extended import get_jwt_identity
 import cloudinary
 import cloudinary.uploader
 from common.database import db
+from marshmallow import ValidationError
 from models.brand import Brand
 from models.category import Category
 from models.attribute import Attribute
@@ -28,9 +29,18 @@ from controllers.superadmin.product_controller import ProductController
 from controllers.superadmin.carousel_controller import CarouselController
 
 from controllers.superadmin.system_monitoring_controller import SystemMonitoringController
+
+from controllers.superadmin.gst_controller import GSTManagementController
+from schemas.superadmin_gst_schemas import CreateGSTRuleSchema, UpdateGSTRuleSchema 
+
+from werkzeug.exceptions import NotFound, BadRequest
+
+
+
 from controllers.superadmin.merchant_transaction_controller import (
     list_all_transactions, get_transaction_by_id, mark_as_paid
 )
+
 
 superadmin_bp = Blueprint('superadmin_bp', __name__)
 
@@ -4271,6 +4281,93 @@ def get_user_profile_route(user_id):
             'message': str(e)
         }), 500
 
+    
+
+
+# --- GST Rule Management Routes ---
+@superadmin_bp.route('/gst-rules', methods=['GET'])
+@super_admin_role_required
+def list_gst_rules_route():
+    try:
+        rules = GSTManagementController.list_all_rules()
+        return jsonify(rules), HTTPStatus.OK
+    except Exception as e:
+        current_app.logger.error(f"API Error listing GST rules: {e}")
+        return jsonify({"message": "Failed to retrieve GST rules."}), HTTPStatus.INTERNAL_SERVER_ERROR
+
+@superadmin_bp.route('/gst-rules/<int:rule_id>', methods=['GET'])
+@super_admin_role_required
+def get_gst_rule_route(rule_id):
+    try:
+        rule = GSTManagementController.get_rule(rule_id)
+        return jsonify(rule), HTTPStatus.OK
+    except NotFound as e:
+        return jsonify({"message": str(e)}), HTTPStatus.NOT_FOUND
+    except Exception as e:
+        current_app.logger.error(f"API Error getting GST rule {rule_id}: {e}")
+        return jsonify({"message": "Failed to retrieve GST rule."}), HTTPStatus.INTERNAL_SERVER_ERROR
+
+@superadmin_bp.route('/gst-rules', methods=['POST'])
+@super_admin_role_required
+def create_gst_rule_route():
+    admin_id = get_jwt_identity()
+    json_data = request.get_json()
+    if not json_data:
+        return jsonify({"message": "No input data provided"}), HTTPStatus.BAD_REQUEST
+    
+    schema = CreateGSTRuleSchema()
+    try:
+        validated_data = schema.load(json_data)
+        created_rule = GSTManagementController.create_rule(validated_data, admin_id)
+        return jsonify(created_rule), HTTPStatus.CREATED
+    except ValidationError as err:
+        return jsonify({"message": "Validation failed", "errors": err.messages}), HTTPStatus.BAD_REQUEST
+    except BadRequest as e:
+        return jsonify({"message": str(e)}), HTTPStatus.BAD_REQUEST
+    except Exception as e:
+        current_app.logger.error(f"API Error creating GST rule: {e}")
+        return jsonify({"message": "Failed to create GST rule."}), HTTPStatus.INTERNAL_SERVER_ERROR
+
+@superadmin_bp.route('/gst-rules/<int:rule_id>', methods=['PUT'])
+@super_admin_role_required
+def update_gst_rule_route(rule_id):
+    admin_id = get_jwt_identity()
+    json_data = request.get_json()
+    if not json_data:
+        return jsonify({"message": "No input data provided"}), HTTPStatus.BAD_REQUEST
+
+    schema = UpdateGSTRuleSchema() # Use Update schema
+    try:
+        validated_data = schema.load(json_data)
+        if not validated_data: # If validated_data is empty, nothing to update
+             return jsonify({"message": "No valid fields provided for update."}), HTTPStatus.BAD_REQUEST
+        updated_rule = GSTManagementController.update_rule(rule_id, validated_data, admin_id)
+        return jsonify(updated_rule), HTTPStatus.OK
+    except ValidationError as err:
+        return jsonify({"message": "Validation failed", "errors": err.messages}), HTTPStatus.BAD_REQUEST
+    except NotFound as e:
+        return jsonify({"message": str(e)}), HTTPStatus.NOT_FOUND
+    except BadRequest as e:
+        return jsonify({"message": str(e)}), HTTPStatus.BAD_REQUEST
+    except Exception as e:
+        current_app.logger.error(f"API Error updating GST rule {rule_id}: {e}")
+        return jsonify({"message": "Failed to update GST rule."}), HTTPStatus.INTERNAL_SERVER_ERROR
+
+@superadmin_bp.route('/gst-rules/<int:rule_id>', methods=['DELETE'])
+@super_admin_role_required
+def delete_gst_rule_route(rule_id):
+    try:
+        GSTManagementController.delete_rule(rule_id)
+        return '', HTTPStatus.NO_CONTENT # Or jsonify({"message": "Rule deleted"})
+    except NotFound as e:
+        return jsonify({"message": str(e)}), HTTPStatus.NOT_FOUND
+    except BadRequest as e: # If controller raises BadRequest for FK constraint
+        return jsonify({"message": str(e)}), HTTPStatus.BAD_REQUEST
+    except Exception as e:
+        current_app.logger.error(f"API Error deleting GST rule {rule_id}: {e}")
+        return jsonify({"message": "Failed to delete GST rule."}), HTTPStatus.INTERNAL_SERVER_ERROR
+
+
 #---Newletter------    
 @superadmin_bp.route('/newsletter/subscribe', methods=['POST', 'OPTIONS'])
 @cross_origin()
@@ -4308,3 +4405,4 @@ def mark_merchant_transaction_paid(txn_id):
     if txn is None:
         return jsonify({"message": "Already paid."}), 400
     return jsonify({"message": "Marked as paid", "transaction": txn.serialize()}), 200
+

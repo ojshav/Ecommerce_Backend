@@ -43,8 +43,10 @@ from models.product_promotion import ProductPromotion
 from models.tax_category import TaxCategory
 from models.homepage import HomepageCategory
 from models.subscription import SubscriptionPlan
-from models.merchant_transaction import MerchantTransaction
 
+from models.gst_rule import GSTRule
+
+from models.merchant_transaction import MerchantTransacti
 
 # --- Merchant models ---
 from models.product import Product
