@@ -28,6 +28,7 @@ from routes.order_routes import order_bp
 from routes.user_address_routes import user_address_bp
 from routes.currency_routes import currency_bp
 from routes.feature_product_routes import feature_product_bp
+# from routes.livestream_routes import livestream_bp
 
 from routes.promo_product_routes import promo_product_bp
 from auth.admin_routes import admin_bp
@@ -174,6 +175,7 @@ def create_app(config_name='default'):
     app.register_blueprint(superadmin_promotion_bp)
     app.register_blueprint(promo_code_bp)
     app.register_blueprint(merchant_transaction_bp, url_prefix='/api')
+    # app.register_blueprint(livestream_bp, url_prefix="/livestream")
 
     app.register_blueprint(games_bp)
 

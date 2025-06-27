@@ -4016,6 +4016,22 @@ def update_carousel_order():
 @superadmin_bp.route('/analytics/revenue', methods=['GET'])
 @super_admin_role_required
 def get_total_revenue():
+    """
+    Get total revenue analytics
+    ---
+    tags:
+      - Analytics
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Total revenue analytics retrieved successfully
+        schema:
+          type: object
+          additionalProperties: true
+      500:
+        description: Internal server error
+    """
     try:
         from controllers.superadmin.performance_analytics import PerformanceAnalyticsController
         result = PerformanceAnalyticsController.get_total_revenue()
@@ -4027,6 +4043,22 @@ def get_total_revenue():
 @superadmin_bp.route('/analytics/active-users', methods=['GET'])
 @super_admin_role_required
 def get_active_users():
+    """
+    Get analytics for active users
+    ---
+    tags:
+      - Analytics
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Active users analytics retrieved successfully
+        schema:
+          type: object
+          additionalProperties: true
+      500:
+        description: Internal server error
+    """
     try:
         from controllers.superadmin.performance_analytics import PerformanceAnalyticsController
         result = PerformanceAnalyticsController.get_active_users()
@@ -4038,6 +4070,22 @@ def get_active_users():
 @superadmin_bp.route('/analytics/total-merchants', methods=['GET'])
 @super_admin_role_required
 def get_total_merchants():
+    """
+    Get total merchants analytics
+    ---
+    tags:
+      - Analytics
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Total merchants analytics retrieved successfully
+        schema:
+          type: object
+          additionalProperties: true
+      500:
+        description: Internal server error
+    """
     try:
         from controllers.superadmin.performance_analytics import PerformanceAnalyticsController
         result = PerformanceAnalyticsController.get_total_merchants()
@@ -4049,6 +4097,22 @@ def get_total_merchants():
 @superadmin_bp.route('/analytics/monthly-orders', methods=['GET'])
 @super_admin_role_required
 def get_monthly_orders():
+    """
+    Get analytics for orders placed in the current month
+    ---
+    tags:
+      - Analytics
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Monthly orders analytics retrieved successfully
+        schema:
+          type: object
+          additionalProperties: true
+      500:
+        description: Internal server error
+    """
     try:
         from controllers.superadmin.performance_analytics import PerformanceAnalyticsController
         result = PerformanceAnalyticsController.get_orders_this_month()
@@ -4060,6 +4124,22 @@ def get_monthly_orders():
 @superadmin_bp.route('/analytics/dashboard', methods=['GET'])
 @super_admin_role_required
 def get_all_metrics():
+    """
+    Get all key dashboard metrics for analytics
+    ---
+    tags:
+      - Analytics
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Dashboard metrics retrieved successfully
+        schema:
+          type: object
+          additionalProperties: true
+      500:
+        description: Internal server error
+    """
     try:
         from controllers.superadmin.performance_analytics import PerformanceAnalyticsController
         result = PerformanceAnalyticsController.get_all_metrics()
@@ -4071,6 +4151,29 @@ def get_all_metrics():
 @superadmin_bp.route('/analytics/revenue-orders-trend', methods=['GET'])
 @super_admin_role_required
 def get_revenue_orders_trend():
+    """
+    Get revenue and orders trend analytics for the specified period
+    ---
+    tags:
+      - Analytics
+    security:
+      - Bearer: []
+    parameters:
+      - name: months
+        in: query
+        type: integer
+        required: false
+        default: 12
+        description: Number of past months to include in the trend analysis
+    responses:
+      200:
+        description: Revenue and orders trend data retrieved successfully
+        schema:
+          type: object
+          additionalProperties: true
+      500:
+        description: Internal server error
+    """
     try:
         from controllers.superadmin.performance_analytics import PerformanceAnalyticsController
         months = request.args.get('months', default=12, type=int)
@@ -4083,6 +4186,29 @@ def get_revenue_orders_trend():
 @superadmin_bp.route('/analytics/merchant-performance', methods=['GET'])
 @super_admin_role_required
 def get_merchant_performance():
+    """
+    Get merchant performance analytics for the specified period
+    ---
+    tags:
+      - Analytics
+    security:
+      - Bearer: []
+    parameters:
+      - name: months
+        in: query
+        type: integer
+        required: false
+        default: 12
+        description: Number of past months to include in the merchant performance analysis
+    responses:
+      200:
+        description: Merchant performance analytics retrieved successfully
+        schema:
+          type: object
+          additionalProperties: true
+      500:
+        description: Internal server error
+    """
     try:
         from controllers.superadmin.performance_analytics import PerformanceAnalyticsController
         months = request.args.get('months', default=12, type=int)
@@ -4095,6 +4221,29 @@ def get_merchant_performance():
 @superadmin_bp.route('/analytics/user-growth-trend', methods=['GET'])
 @super_admin_role_required
 def get_user_growth_trend():
+    """
+    Get user growth trend analytics
+    ---
+    tags:
+      - Analytics
+    security:
+      - Bearer: []
+    parameters:
+      - name: months
+        in: query
+        type: integer
+        required: false
+        default: 12
+        description: Number of past months to include in the user growth trend analysis
+    responses:
+      200:
+        description: User growth trend data retrieved successfully
+        schema:
+          type: object
+          additionalProperties: true
+      500:
+        description: Internal server error
+    """
     try:
         from controllers.superadmin.performance_analytics import PerformanceAnalyticsController
         months = request.args.get('months', default=12, type=int)
@@ -4107,7 +4256,29 @@ def get_user_growth_trend():
 @superadmin_bp.route('/analytics/average-order-value', methods=['GET'])
 @super_admin_role_required
 def get_average_order_value():
-    """Get average order value analytics"""
+    """
+    Get average order value analytics
+    ---
+    tags:
+      - Analytics
+    security:
+      - Bearer: []
+    parameters:
+      - name: months
+        in: query
+        type: integer
+        required: false
+        default: 1
+        description: Number of past months to include in the analysis
+    responses:
+      200:
+        description: Average order value analytics retrieved successfully
+        schema:
+          type: object
+          additionalProperties: true
+      500:
+        description: Internal server error
+    """
     try:
         from controllers.superadmin.performance_analytics import PerformanceAnalyticsController
         months = request.args.get('months', default=1, type=int)
@@ -4123,7 +4294,22 @@ def get_average_order_value():
 @superadmin_bp.route('/analytics/total-products', methods=['GET'])
 @super_admin_role_required
 def get_total_products():
-    """Get total products analytics"""
+    """
+    Get total products analytics
+    ---
+    tags:
+      - Analytics
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Total products analytics retrieved successfully
+        schema:
+          type: object
+          additionalProperties: true
+      500:
+        description: Internal server error
+    """
     try:
         from controllers.superadmin.performance_analytics import PerformanceAnalyticsController
         months = request.args.get('months', default=1, type=int)
@@ -4139,7 +4325,22 @@ def get_total_products():
 @superadmin_bp.route('/analytics/category-distribution', methods=['GET'])
 @super_admin_role_required
 def get_category_distribution():
-    """Get product category distribution analytics"""
+    """
+    Get product category distribution analytics
+    ---
+    tags:
+      - Analytics
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Category distribution analytics retrieved successfully
+        schema:
+          type: object
+          additionalProperties: true
+      500:
+        description: Internal server error
+    """
     try:
         from controllers.superadmin.performance_analytics import PerformanceAnalyticsController
         result = PerformanceAnalyticsController.get_category_distribution()
@@ -4154,7 +4355,22 @@ def get_category_distribution():
 @superadmin_bp.route('/analytics/top-merchants', methods=['GET'])
 @super_admin_role_required
 def get_top_merchants():
-    """Get top performing merchants based on revenue"""
+    """
+    Get top performing merchants based on revenue
+    ---
+    tags:
+      - Analytics
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Top merchants retrieved successfully
+        schema:
+          type: object
+          additionalProperties: true
+      500:
+        description: Internal server error
+    """
     try:
         from controllers.superadmin.performance_analytics import PerformanceAnalyticsController
         result = PerformanceAnalyticsController.get_top_merchants()
@@ -4169,7 +4385,29 @@ def get_top_merchants():
 @superadmin_bp.route('/analytics/merchant-performance-details', methods=['GET'])
 @super_admin_role_required
 def get_merchant_performance_details():
-    """Get detailed merchant performance metrics including revenue, orders, ratings, and product metrics"""
+    """
+    Get detailed merchant performance metrics including revenue, orders, ratings, and product metrics
+    ---
+    tags:
+      - Analytics
+    security:
+      - Bearer: []
+    parameters:
+      - name: months
+        in: query
+        type: integer
+        required: false
+        default: 12
+        description: Number of past months to include in the analysis
+    responses:
+      200:
+        description: Merchant performance details retrieved successfully
+        schema:
+          type: object
+          additionalProperties: true
+      500:
+        description: Internal server error
+    """
     try:
         from controllers.superadmin.performance_analytics import PerformanceAnalyticsController
         months = request.args.get('months', default=12, type=int)
@@ -4185,7 +4423,29 @@ def get_merchant_performance_details():
 @superadmin_bp.route('/analytics/conversion-rate', methods=['GET'])
 @super_admin_role_required
 def get_conversion_rate():
-    """Get conversion rate analytics (visits to orders)"""
+    """
+    Get conversion rate analytics (visits to orders)
+    ---
+    tags:
+      - Analytics
+    security:
+      - Bearer: []
+    parameters:
+      - name: months
+        in: query
+        type: integer
+        required: false
+        default: 12
+        description: Number of past months to include in the conversion rate analysis
+    responses:
+      200:
+        description: Conversion rate data retrieved successfully
+        schema:
+          type: object
+          additionalProperties: true
+      500:
+        description: Internal server error
+    """
     try:
         from controllers.superadmin.performance_analytics import PerformanceAnalyticsController
         months = request.args.get('months', default=12, type=int)
@@ -4201,6 +4461,22 @@ def get_conversion_rate():
 @superadmin_bp.route('/analytics/hourly', methods=['GET'])
 @super_admin_role_required
 def get_hourly_analytics():
+    """
+    Get hourly analytics data for the platform
+    ---
+    tags:
+      - Analytics
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Hourly analytics data retrieved successfully
+        schema:
+          type: object
+          additionalProperties: true
+      500:
+        description: Internal server error
+    """
     try:
         from controllers.superadmin.performance_analytics import PerformanceAnalyticsController
         return PerformanceAnalyticsController.get_hourly_analytics()
@@ -4214,14 +4490,51 @@ def get_hourly_analytics():
 @superadmin_bp.route('/monitoring/system/status', methods=['GET'])
 @super_admin_role_required
 def system_status_route():
-    """Get current system status and uptime"""
+    """
+    Get current system status and uptime
+    ---
+    tags:
+      - System Monitoring
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Current system status and uptime retrieved successfully
+        schema:
+          type: object
+          additionalProperties: true
+      500:
+        description: Internal server error
+    """
     result = SystemMonitoringController.get_system_status()
     return jsonify(result), 200 if result['status'] == 'success' else 500
 
 @superadmin_bp.route('/monitoring/system/response-times', methods=['GET'])
 @super_admin_role_required
 def response_times_route():
-    """Get response time trends and averages"""
+    """
+    Get response time trends and averages
+    ---
+    tags:
+      - System Monitoring
+    security:
+      - Bearer: []
+    parameters:
+      - name: hours
+        in: query
+        type: integer
+        required: false
+        default: 24
+        description: Number of past hours to include in the response time analysis
+    responses:
+      200:
+        description: Response time data retrieved successfully
+        schema:
+          type: object
+          additionalProperties: true
+      500:
+        description: Internal server error
+    """
     hours = int(request.args.get('hours', 24))
     result = SystemMonitoringController.get_response_times(hours)
     return jsonify(result), 200 if result['status'] == 'success' else 500
@@ -4229,7 +4542,29 @@ def response_times_route():
 @superadmin_bp.route('/monitoring/system/errors', methods=['GET'])
 @super_admin_role_required
 def error_distribution_route():
-    """Get error distribution and details"""
+    """
+    Get error distribution and details
+    ---
+    tags:
+      - System Monitoring
+    security:
+      - Bearer: []
+    parameters:
+      - name: hours
+        in: query
+        type: integer
+        required: false
+        default: 24
+        description: Number of past hours to include in the error analysis
+    responses:
+      200:
+        description: Error distribution retrieved successfully
+        schema:
+          type: object
+          additionalProperties: true
+      500:
+        description: Internal server error
+    """
     hours = int(request.args.get('hours', 24))
     result = SystemMonitoringController.get_error_distribution(hours)
     return jsonify(result), 200 if result['status'] == 'success' else 500
@@ -4237,14 +4572,65 @@ def error_distribution_route():
 @superadmin_bp.route('/monitoring/system/service/<service_name>', methods=['GET'])
 @super_admin_role_required
 def service_status_route(service_name):
-    """Get detailed status for a specific service"""
+    """
+    Get detailed status for a specific service
+    ---
+    tags:
+      - System Monitoring
+    security:
+      - Bearer: []
+    parameters:
+      - name: service_name
+        in: path
+        type: string
+        required: true
+        description: Name of the service to get status for
+      - name: hours
+        in: query
+        type: integer
+        required: false
+        default: 24
+        description: Number of past hours to include in the status
+    responses:
+      200:
+        description: Service status retrieved successfully
+        schema:
+          type: object
+          additionalProperties: true
+      404:
+        description: Service not found
+      500:
+        description: Internal server error
+    """
     hours = request.args.get('hours', default=24, type=int)
     return jsonify(SystemMonitoringController.get_service_status(service_name, hours))
 
 @superadmin_bp.route('/monitoring/system/health', methods=['GET'])
 @super_admin_role_required
 def system_health_route():
-    """Get overall system health status"""
+    """
+    Get overall system health status
+    ---
+    tags:
+      - System Monitoring
+    security:
+      - Bearer: []
+    parameters:
+      - name: hours
+        in: query
+        type: integer
+        required: false
+        default: 1
+        description: Number of past hours to include in the health check
+    responses:
+      200:
+        description: System health status retrieved successfully
+        schema:
+          type: object
+          additionalProperties: true
+      500:
+        description: Internal server error
+    """
     hours = int(request.args.get('hours', 1))
     result = SystemMonitoringController.get_system_health(hours)
     return jsonify(result), 200 if result['status'] == 'success' else 500
@@ -4253,6 +4639,28 @@ def system_health_route():
 @cross_origin()
 @super_admin_role_required
 def list_users():
+    """
+    Get a list of all users
+    ---
+    tags:
+      - Users
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: List of users retrieved successfully
+        schema:
+          type: array
+          items:
+            type: object
+            additionalProperties: true
+      401:
+        description: Unauthorized - Invalid or missing token
+      403:
+        description: Forbidden - User does not have super admin role
+      500:
+        description: Internal server error
+    """
     try:
         from controllers.superadmin.user_management_controller import get_all_users
         return get_all_users()
@@ -4266,6 +4674,53 @@ def list_users():
 @cross_origin()
 @super_admin_role_required
 def update_user_status_route(user_id):
+    """
+    Update the status (active/inactive) of a user
+    ---
+    tags:
+      - Users
+    security:
+      - Bearer: []
+    parameters:
+      - name: user_id
+        in: path
+        type: integer
+        required: true
+        description: ID of the user to update
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - status
+            properties:
+              status:
+                type: string
+                enum: [active, inactive]
+                description: New status for the user
+    responses:
+      200:
+        description: User status updated successfully
+        schema:
+          type: object
+          properties:
+            user_id:
+              type: integer
+            status:
+              type: string
+      400:
+        description: Bad request - Invalid status value
+      401:
+        description: Unauthorized - Invalid or missing token
+      403:
+        description: Forbidden - User does not have super admin role
+      404:
+        description: User not found
+      500:
+        description: Internal server error
+    """
     try:
         from controllers.superadmin.user_management_controller import update_user_status
         return update_user_status(user_id)
@@ -4279,6 +4734,34 @@ def update_user_status_route(user_id):
 @cross_origin()
 @super_admin_role_required
 def get_user_profile_route(user_id):
+    """
+    Get the profile details of a specific user
+    ---
+    tags:
+      - Users
+    security:
+      - Bearer: []
+    parameters:
+      - name: user_id
+        in: path
+        type: integer
+        required: true
+        description: ID of the user to retrieve profile for
+    responses:
+      200:
+        description: User profile retrieved successfully
+        schema:
+          type: object
+          additionalProperties: true
+      401:
+        description: Unauthorized - Invalid or missing token
+      403:
+        description: Forbidden - User does not have super admin role
+      404:
+        description: User not found
+      500:
+        description: Internal server error
+    """
     try:
         from controllers.superadmin.user_management_controller import get_user_profile
         return get_user_profile(user_id)
@@ -4379,11 +4862,74 @@ def delete_gst_rule_route(rule_id):
 @superadmin_bp.route('/newsletter/subscribe', methods=['POST', 'OPTIONS'])
 @cross_origin()
 def subscribe_newsletter():
+    """
+    Subscribe a user to the newsletter
+    ---
+    tags:
+      - Newsletter
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - email
+            properties:
+              email:
+                type: string
+                format: email
+                description: Email address to subscribe
+    responses:
+      200:
+        description: Subscription successful
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+      400:
+        description: Bad request - Invalid or missing email
+      409:
+        description: Email already subscribed
+      500:
+        description: Internal server error
+    """
     return newsletter_controller.subscribe_email()
 
 @superadmin_bp.route('/newsletter/subscribers', methods=['GET'])
 @super_admin_role_required
 def get_all_subscribers():
+    """
+    Get a list of all newsletter subscribers
+    ---
+    tags:
+      - Newsletter
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: List of newsletter subscribers retrieved successfully
+        schema:
+          type: array
+          items:
+            type: object
+            properties:
+              email:
+                type: string
+                format: email
+                description: Subscriber's email address
+              subscribed_at:
+                type: string
+                format: date-time
+                description: Subscription date and time
+      401:
+        description: Unauthorized - Invalid or missing token
+      403:
+        description: Forbidden - User does not have super admin role
+      500:
+        description: Internal server error
+    """
     return newsletter_controller.list_subscribers()
 
 #--- Merchant Transaction Related ----
@@ -5045,7 +5591,66 @@ def get_profile_route(user_id):
 @cross_origin()
 @super_admin_role_required
 def update_profile_route(user_id):
-    """Update superadmin profile route."""
+    """
+    Update superadmin profile details
+    ---
+    tags:
+      - Superadmins
+    security:
+      - Bearer: []
+    parameters:
+      - name: user_id
+        in: path
+        type: integer
+        required: true
+        description: ID of the superadmin user to update
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              name:
+                type: string
+                description: New name of the superadmin
+              email:
+                type: string
+                format: email
+                description: New email address of the superadmin
+              password:
+                type: string
+                format: password
+                description: New password for the superadmin
+    responses:
+      200:
+        description: Superadmin profile updated successfully
+        schema:
+          type: object
+          properties:
+            user_id:
+              type: integer
+            name:
+              type: string
+            email:
+              type: string
+            status:
+              type: string
+              enum: [active, inactive]
+            updated_at:
+              type: string
+              format: date-time
+      400:
+        description: Bad request - Missing or invalid fields
+      401:
+        description: Unauthorized - Invalid or missing token
+      403:
+        description: Forbidden - User does not have super admin role
+      404:
+        description: Superadmin not found
+      500:
+        description: Internal server error
+    """
     try:
         from controllers.superadmin.profile_controller import update_superadmin_profile
         current_app.logger.info(f"Updating profile for user ID: {user_id}")
@@ -5074,21 +5679,145 @@ def update_profile_route(user_id):
 @cross_origin()
 @super_admin_role_required
 def create_superadmin_route():
-    """Create a new superadmin user."""
+    """
+    Create a new superadmin user
+    ---
+    tags:
+      - Superadmins
+    security:
+      - Bearer: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - email
+              - name
+              - password
+            properties:
+              email:
+                type: string
+                format: email
+                description: Email address of the new superadmin
+              name:
+                type: string
+                description: Name of the new superadmin
+              password:
+                type: string
+                format: password
+                description: Password for the new superadmin
+    responses:
+      201:
+        description: Superadmin created successfully
+        schema:
+          type: object
+          properties:
+            user_id:
+              type: integer
+            email:
+              type: string
+            name:
+              type: string
+            status:
+              type: string
+              enum: [active, inactive]
+            created_at:
+              type: string
+              format: date-time
+      400:
+        description: Bad request - Missing or invalid fields
+      401:
+        description: Unauthorized - Invalid or missing token
+      403:
+        description: Forbidden - User does not have super admin role
+      409:
+        description: Conflict - Superadmin with this email already exists
+      500:
+        description: Internal server error
+    """
     return create_superadmin()
 
 @superadmin_bp.route('/superadmins', methods=['GET'])
 @cross_origin()
 @super_admin_role_required
 def list_superadmins_route():
-    """Get list of all superadmin users."""
+    """
+    Get a list of all superadmin users
+    ---
+    tags:
+      - Superadmins
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: List of superadmin users retrieved successfully
+        schema:
+          type: array
+          items:
+            type: object
+            properties:
+              user_id:
+                type: integer
+              email:
+                type: string
+              name:
+                type: string
+              status:
+                type: string
+                enum: [active, inactive]
+              created_at:
+                type: string
+                format: date-time
+              updated_at:
+                type: string
+                format: date-time
+      401:
+        description: Unauthorized - Invalid or missing token
+      403:
+        description: Forbidden - User does not have super admin role
+      500:
+        description: Internal server error
+    """
     return get_all_superadmins()
 
 @superadmin_bp.route('/superadmins/<int:user_id>', methods=['DELETE'])
 @cross_origin()
 @super_admin_role_required
 def delete_superadmin_route(user_id):
-    """Delete a superadmin user."""
+    """
+    Delete a superadmin user
+    ---
+    tags:
+      - Superadmins
+    security:
+      - Bearer: []
+    parameters:
+      - name: user_id
+        in: path
+        type: integer
+        required: true
+        description: ID of the superadmin user to delete
+    responses:
+      200:
+        description: Superadmin deleted successfully
+        schema:
+          type: object
+          properties:
+            user_id:
+              type: integer
+            message:
+              type: string
+      401:
+        description: Unauthorized - Invalid or missing token
+      403:
+        description: Forbidden - User does not have super admin role
+      404:
+        description: Superadmin not found
+      500:
+        description: Internal server error
+    """
     try:
         from controllers.superadmin.profile_controller import delete_superadmin
         return delete_superadmin(user_id)
@@ -5109,7 +5838,39 @@ def delete_superadmin_route(user_id):
 @cross_origin()
 @super_admin_role_required
 def reactivate_superadmin_route(user_id):
-    """Reactivate a disabled superadmin user."""
+    """
+    Reactivate a disabled superadmin user
+    ---
+    tags:
+      - Superadmins
+    security:
+      - Bearer: []
+    parameters:
+      - name: user_id
+        in: path
+        type: integer
+        required: true
+        description: ID of the superadmin user to reactivate
+    responses:
+      200:
+        description: Superadmin reactivated successfully
+        schema:
+          type: object
+          properties:
+            user_id:
+              type: integer
+            status:
+              type: string
+              description: New status of the superadmin
+      401:
+        description: Unauthorized - Invalid or missing token
+      403:
+        description: Forbidden - User does not have super admin role
+      404:
+        description: Superadmin not found
+      500:
+        description: Internal server error
+    """
     try:
         from controllers.superadmin.profile_controller import reactivate_superadmin
         return reactivate_superadmin(user_id)
