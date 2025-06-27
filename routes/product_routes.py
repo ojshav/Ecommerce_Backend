@@ -967,7 +967,106 @@ def get_trendy_deals():
 @product_bp.route('/api/products/<int:product_id>/reviews', methods=['GET'])
 @cross_origin()
 def get_product_reviews(product_id):
-    """Get all reviews for a product"""
+    """
+    Get all reviews for a product
+    ---
+    tags:
+      - Products
+    parameters:
+      - in: path
+        name: product_id
+        type: integer
+        required: true
+        description: ID of the product to retrieve reviews for
+      - in: query
+        name: page
+        type: integer
+        required: false
+        default: 1
+        description: Page number
+      - in: query
+        name: per_page
+        type: integer
+        required: false
+        default: 10
+        description: Items per page (max 50)
+      - in: query
+        name: min_rating
+        type: integer
+        required: false
+        description: Minimum rating filter
+      - in: query
+        name: sort_by
+        type: string
+        required: false
+        default: created_at
+        description: Field to sort by
+      - in: query
+        name: order
+        type: string
+        required: false
+        default: desc
+        enum: [asc, desc]
+        description: Sort order
+    responses:
+      200:
+        description: List of product reviews retrieved successfully
+        schema:
+          type: object
+          properties:
+            reviews:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  user:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                      name:
+                        type: string
+                      avatar:
+                        type: string
+                  rating:
+                    type: integer
+                  title:
+                    type: string
+                  body:
+                    type: string
+                  created_at:
+                    type: string
+                  images:
+                    type: array
+                    items:
+                      type: object
+            average_rating:
+              type: number
+              format: float
+            total_reviews:
+              type: integer
+            pagination:
+              type: object
+              properties:
+                total:
+                  type: integer
+                pages:
+                  type: integer
+                current_page:
+                  type: integer
+                per_page:
+                  type: integer
+                has_next:
+                  type: boolean
+                has_prev:
+                  type: boolean
+      404:
+        description: Product not found
+      500:
+        description: Internal server error
+    """
     try:
         from models.review import Review
         from sqlalchemy import func
@@ -1047,7 +1146,98 @@ def get_product_reviews(product_id):
 @product_bp.route('/api/products/discounts', methods=['GET'])
 @cross_origin()
 def get_product_discounts():
-    """Get all products with discounts"""
+    """
+    Get all products with discounts
+    ---
+    tags:
+      - Products
+    parameters:
+      - in: query
+        name: page
+        type: integer
+        required: false
+        default: 1
+        description: Page number
+      - in: query
+        name: per_page
+        type: integer
+        required: false
+        default: 10
+        description: Items per page (max 50)
+      - in: query
+        name: min_discount
+        type: number
+        required: false
+        description: Minimum discount percentage filter
+      - in: query
+        name: max_discount
+        type: number
+        required: false
+        description: Maximum discount percentage filter
+      - in: query
+        name: sort_by
+        type: string
+        required: false
+        default: discount_pct
+        description: Field to sort by
+      - in: query
+        name: order
+        type: string
+        required: false
+        default: desc
+        enum: [asc, desc]
+        description: Sort order
+    responses:
+      200:
+        description: List of discounted products retrieved successfully
+        schema:
+          type: object
+          properties:
+            products:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
+                  description:
+                    type: string
+                  price:
+                    type: number
+                    format: float
+                  originalPrice:
+                    type: number
+                    format: float
+                  discount_pct:
+                    type: number
+                    format: float
+                  discount_amount:
+                    type: number
+                    format: float
+                  primary_image:
+                    type: string
+                  image:
+                    type: string
+            pagination:
+              type: object
+              properties:
+                total:
+                  type: integer
+                pages:
+                  type: integer
+                current_page:
+                  type: integer
+                per_page:
+                  type: integer
+                has_next:
+                  type: boolean
+                has_prev:
+                  type: boolean
+      500:
+        description: Internal server error
+    """
     try:
         from models.product import Product
         from sqlalchemy import func
@@ -1132,6 +1322,67 @@ def get_product_discounts():
 @product_bp.route('/api/products/search-suggestions', methods=['GET'])
 @cross_origin()
 def get_search_suggestions():
+    """
+    Get search suggestions for products, categories, and brands
+    ---
+    tags:
+      - Products
+    parameters:
+      - in: query
+        name: q
+        type: string
+        required: true
+        description: Search query string
+    responses:
+      200:
+        description: Search suggestions retrieved successfully
+        schema:
+          type: object
+          properties:
+            products:
+              type: array
+              items:
+                type: object
+                properties:
+                  id:
+                    type: string
+                  name:
+                    type: string
+                  price:
+                    type: number
+                    format: float
+                  primary_image:
+                    type: string
+            categories:
+              type: array
+              items:
+                type: object
+                properties:
+                  category_id:
+                    type: integer
+                  name:
+                    type: string
+                  slug:
+                    type: string
+                  parent_id:
+                    type: integer
+                    nullable: true
+            brands:
+              type: array
+              items:
+                type: object
+                properties:
+                  brand_id:
+                    type: integer
+                  name:
+                    type: string
+                  slug:
+                    type: string
+                  icon_url:
+                    type: string
+      500:
+        description: Internal server error
+    """
     try:
         query = request.args.get('q', '').strip()
         if not query:

@@ -1802,6 +1802,60 @@ def list_product_attributes(pid):
 @merchant_dashboard_bp.route('/products/<int:pid>/attributes/values', methods=['POST'])
 @merchant_role_required
 def set_product_attribute_values(pid):
+    """
+    Set multiple attribute values for a product
+    ---
+    tags:
+      - Merchant - Products
+    security:
+      - Bearer: []
+    parameters:
+      - name: pid
+        in: path
+        type: integer
+        required: true
+        description: Product ID
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: true
+            description: Dictionary of attribute_id to value(s)
+    responses:
+      200:
+        description: Attribute values updated successfully
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+            attributes:
+              type: array
+              items:
+                type: object
+      400:
+        description: Invalid data format or value
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+            error:
+              type: string
+            attribute_id:
+              type: integer
+      500:
+        description: Internal server error
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+            error:
+              type: string
+    """
     try:
         data = request.get_json()
         current_app.logger.info(f"Received attribute values request for product {pid}: {data}")
@@ -1856,6 +1910,68 @@ def set_product_attribute_values(pid):
 @merchant_dashboard_bp.route('/products/<int:pid>/attributes/<int:aid>/<value_code>', methods=['PUT'])
 @merchant_role_required
 def update_product_attribute(pid, aid, value_code):
+    """
+    Update a specific attribute value for a product
+    ---
+    tags:
+      - Merchant - Products
+    security:
+      - Bearer: []
+    parameters:
+      - name: pid
+        in: path
+        type: integer
+        required: true
+        description: Product ID
+      - name: aid
+        in: path
+        type: integer
+        required: true
+        description: Attribute ID
+      - name: value_code
+        in: path
+        type: string
+        required: true
+        description: Code of the attribute value to update
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              value_label:
+                type: string
+                description: New label for the attribute value
+              is_selected:
+                type: boolean
+                description: Whether this value is selected for the product
+    responses:
+      200:
+        description: Attribute value updated successfully
+        schema:
+          type: object
+          properties:
+            attribute_id:
+              type: integer
+            value_code:
+              type: string
+            value_label:
+              type: string
+            is_selected:
+              type: boolean
+      400:
+        description: Invalid request data
+      404:
+        description: Product or attribute value not found
+      500:
+        description: Internal server error
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+    """
     try:
         data = request.get_json()
         if not data:
@@ -1872,6 +1988,42 @@ def update_product_attribute(pid, aid, value_code):
 @merchant_dashboard_bp.route('/products/<int:pid>/attributes/<int:aid>/<value_code>', methods=['DELETE'])
 @merchant_role_required
 def delete_product_attribute(pid, aid, value_code):
+    """
+    Delete a specific attribute value from a product
+    ---
+    tags:
+      - Merchant - Products
+    security:
+      - Bearer: []
+    parameters:
+      - name: pid
+        in: path
+        type: integer
+        required: true
+        description: Product ID
+      - name: aid
+        in: path
+        type: integer
+        required: true
+        description: Attribute ID
+      - name: value_code
+        in: path
+        type: string
+        required: true
+        description: Code of the attribute value to delete
+    responses:
+      204:
+        description: Attribute value deleted successfully
+      404:
+        description: Product or attribute value not found
+      500:
+        description: Internal server error
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+    """
     try:
         MerchantProductAttributeController.delete(pid, aid, value_code)
         return '', HTTPStatus.NO_CONTENT
@@ -2399,7 +2551,48 @@ def list_pending_products():
 @merchant_dashboard_bp.route('/products/approved', methods=['GET'])
 @super_admin_role_required
 def list_approved_products():
-    """Get all approved products."""
+    """
+    Get all approved products
+    ---
+    tags:
+      - Merchant - Products
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: List of approved products retrieved successfully
+        schema:
+          type: array
+          items:
+            type: object
+            properties:
+              product_id:
+                type: integer
+              name:
+                type: string
+              sku:
+                type: string
+              merchant_id:
+                type: integer
+              merchant_name:
+                type: string
+              status:
+                type: string
+                enum: [APPROVED]
+              created_at:
+                type: string
+                format: date-time
+              updated_at:
+                type: string
+                format: date-time
+      500:
+        description: Internal server error
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+    """
     try:
         products = MerchantProductController.get_approved_products()
         return jsonify([p.serialize() for p in products]), HTTPStatus.OK
@@ -2410,7 +2603,50 @@ def list_approved_products():
 @merchant_dashboard_bp.route('/products/rejected', methods=['GET'])
 @super_admin_role_required
 def list_rejected_products():
-    """Get all rejected products."""
+    """
+    Get all rejected products
+    ---
+    tags:
+      - Merchant - Products
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: List of rejected products retrieved successfully
+        schema:
+          type: array
+          items:
+            type: object
+            properties:
+              product_id:
+                type: integer
+              name:
+                type: string
+              sku:
+                type: string
+              merchant_id:
+                type: integer
+              merchant_name:
+                type: string
+              status:
+                type: string
+                enum: [REJECTED]
+              rejection_reason:
+                type: string
+              created_at:
+                type: string
+                format: date-time
+              updated_at:
+                type: string
+                format: date-time
+      500:
+        description: Internal server error
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+    """
     try:
         products = MerchantProductController.get_rejected_products()
         return jsonify([p.serialize() for p in products]), HTTPStatus.OK
@@ -2421,7 +2657,46 @@ def list_rejected_products():
 @merchant_dashboard_bp.route('/products/<int:pid>/approve', methods=['POST'])
 @super_admin_role_required
 def approve_product(pid):
-    """Approve a product."""
+    """
+    Approve a product
+    ---
+    tags:
+      - Merchant - Products
+    security:
+      - Bearer: []
+    parameters:
+      - name: pid
+        in: path
+        type: integer
+        required: true
+        description: Product ID to approve
+    responses:
+      200:
+        description: Product approved successfully
+        schema:
+          type: object
+          properties:
+            product_id:
+              type: integer
+            status:
+              type: string
+              enum: [APPROVED]
+            approved_by:
+              type: integer
+              description: Admin user ID who approved the product
+            approved_at:
+              type: string
+              format: date-time
+      404:
+        description: Product not found
+      500:
+        description: Internal server error
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+    """
     try:
         admin_id = get_jwt_identity()
         product = MerchantProductController.approve(pid, admin_id)
@@ -2433,7 +2708,62 @@ def approve_product(pid):
 @merchant_dashboard_bp.route('/products/<int:pid>/reject', methods=['POST'])
 @super_admin_role_required
 def reject_product(pid):
-    """Reject a product."""
+    """
+    Reject a product
+    ---
+    tags:
+      - Merchant - Products
+    security:
+      - Bearer: []
+    parameters:
+      - name: pid
+        in: path
+        type: integer
+        required: true
+        description: Product ID to reject
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - reason
+            properties:
+              reason:
+                type: string
+                description: Reason for rejecting the product
+    responses:
+      200:
+        description: Product rejected successfully
+        schema:
+          type: object
+          properties:
+            product_id:
+              type: integer
+            status:
+              type: string
+              enum: [REJECTED]
+            rejected_by:
+              type: integer
+              description: Admin user ID who rejected the product
+            rejected_at:
+              type: string
+              format: date-time
+            rejection_reason:
+              type: string
+      400:
+        description: Rejection reason is required
+      404:
+        description: Product not found
+      500:
+        description: Internal server error
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+    """
     try:
         data = request.get_json()
         if not data or 'reason' not in data:
@@ -3776,7 +4106,48 @@ def get_recent_reviews():
 @jwt_required()
 @merchant_role_required
 def get_revenue_orders_trend():
-    """Get revenue and orders trend data."""
+    """
+    Get revenue and orders trend analytics for the merchant
+    ---
+    tags:
+      - Merchant - Analytics
+    security:
+      - Bearer: []
+    parameters:
+      - name: months
+        in: query
+        type: integer
+        required: false
+        default: 6
+        description: Number of past months to include in the trend analysis
+    responses:
+      200:
+        description: Revenue and orders trend data retrieved successfully
+        schema:
+          type: object
+          properties:
+            status:
+              type: string
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  month:
+                    type: string
+                    description: Month in YYYY-MM format
+                  total_revenue:
+                    type: number
+                    format: float
+                    description: Total revenue for the month
+                  total_orders:
+                    type: integer
+                    description: Total orders for the month
+      401:
+        description: Unauthorized - Invalid or missing token
+      500:
+        description: Internal server error
+    """
     try:
         current_user_id = get_jwt_identity()
         trend_data = MerchantDashboardController.get_sales_data(current_user_id)
@@ -3795,7 +4166,60 @@ def get_revenue_orders_trend():
 @jwt_required()
 @merchant_role_required
 def get_merchant_performance():
-    """Get merchant performance metrics."""
+    """
+    Get merchant performance metrics
+    ---
+    tags:
+      - Merchant - Analytics
+    security:
+      - Bearer: []
+    parameters:
+      - name: months
+        in: query
+        type: integer
+        required: false
+        default: 6
+        description: Number of past months to include in the performance summary
+    responses:
+      200:
+        description: Merchant performance metrics retrieved successfully
+        schema:
+          type: object
+          properties:
+            status:
+              type: string
+            data:
+              type: object
+              properties:
+                total_orders:
+                  type: integer
+                total_revenue:
+                  type: number
+                  format: float
+                average_order_value:
+                  type: number
+                  format: float
+                repeat_customers:
+                  type: integer
+                new_customers:
+                  type: integer
+                total_products:
+                  type: integer
+                top_product:
+                  type: object
+                  properties:
+                    product_id:
+                      type: integer
+                    product_name:
+                      type: string
+                    total_sales:
+                      type: number
+                      format: float
+      401:
+        description: Unauthorized - Invalid or missing token
+      500:
+        description: Internal server error
+    """
     try:
         current_user_id = get_jwt_identity()
         performance_data = MerchantDashboardController.get_monthly_summary(current_user_id)
@@ -3814,7 +4238,55 @@ def get_merchant_performance():
 @jwt_required()
 @merchant_role_required
 def get_top_products():
-    """Get top performing products."""
+    """
+    Get top performing products for the merchant
+    ---
+    tags:
+      - Merchant - Analytics
+    security:
+      - Bearer: []
+    parameters:
+      - name: limit
+        in: query
+        type: integer
+        required: false
+        default: 5
+        description: Number of top products to return
+      - name: months
+        in: query
+        type: integer
+        required: false
+        default: 6
+        description: Number of past months to include in the analysis
+    responses:
+      200:
+        description: Top performing products data retrieved successfully
+        schema:
+          type: object
+          properties:
+            status:
+              type: string
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  product_id:
+                    type: integer
+                  product_name:
+                    type: string
+                  total_sales:
+                    type: number
+                    format: float
+                  total_orders:
+                    type: integer
+                  units_sold:
+                    type: integer
+      401:
+        description: Unauthorized - Invalid or missing token
+      500:
+        description: Internal server error
+    """
     try:
         current_user_id = get_jwt_identity()
         products_data = MerchantDashboardController.get_top_products(current_user_id)
@@ -3833,7 +4305,64 @@ def get_top_products():
 @jwt_required()
 @merchant_role_required
 def get_recent_orders():
-    """Get recent orders."""
+    """
+    Get recent orders for the merchant
+    ---
+    tags:
+      - Merchant - Analytics
+    security:
+      - Bearer: []
+    parameters:
+      - name: limit
+        in: query
+        type: integer
+        required: false
+        default: 5
+        description: Number of recent orders to return
+    responses:
+      200:
+        description: Recent orders data retrieved successfully
+        schema:
+          type: object
+          properties:
+            status:
+              type: string
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  order_id:
+                    type: string
+                  user_id:
+                    type: integer
+                  total_amount:
+                    type: number
+                    format: float
+                  status:
+                    type: string
+                  created_at:
+                    type: string
+                    format: date-time
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        product_id:
+                          type: integer
+                        product_name:
+                          type: string
+                        quantity:
+                          type: integer
+                        unit_price:
+                          type: number
+                          format: float
+      401:
+        description: Unauthorized - Invalid or missing token
+      500:
+        description: Internal server error
+    """
     try:
         current_user_id = get_jwt_identity()
         orders_data = MerchantDashboardController.get_recent_orders(current_user_id)
@@ -3854,7 +4383,41 @@ def get_recent_orders():
 @jwt_required()
 @merchant_role_required
 def get_monthly_sales():
-    """Get monthly sales revenue and units sold for the last 5 months."""
+    """
+    Get monthly sales revenue and units sold for the last 5 months
+    ---
+    tags:
+      - Merchant - Reports
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Monthly sales analytics retrieved successfully
+        schema:
+          type: object
+          properties:
+            status:
+              type: string
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  month:
+                    type: string
+                    description: Month in YYYY-MM format
+                  total_sales:
+                    type: number
+                    format: float
+                    description: Total sales revenue for the month
+                  units_sold:
+                    type: integer
+                    description: Total units sold for the month
+      401:
+        description: Unauthorized - Invalid or missing token
+      500:
+        description: Internal server error
+    """
     try:
         current_user_id = get_jwt_identity()
         monthly_data = MerchantReportController.get_monthly_sales_analytics(current_user_id)
@@ -3876,6 +4439,44 @@ def get_monthly_sales():
 @jwt_required()
 @merchant_role_required
 def get_detailed_monthly_sales():
+    """
+    Get detailed monthly sales analytics for the merchant
+    ---
+    tags:
+      - Merchant - Reports
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Detailed monthly sales data retrieved successfully
+        schema:
+          type: object
+          properties:
+            status:
+              type: string
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  month:
+                    type: string
+                    description: Month in YYYY-MM format
+                  total_sales:
+                    type: number
+                    format: float
+                    description: Total sales revenue for the month
+                  total_orders:
+                    type: integer
+                    description: Total number of orders for the month
+                  units_sold:
+                    type: integer
+                    description: Total units sold for the month
+      401:
+        description: Unauthorized - Invalid or missing token
+      500:
+        description: Internal server error
+    """
     try:
         current_user_id = get_jwt_identity()
         data = MerchantReportController.get_detailed_monthly_sales(current_user_id)
@@ -3896,6 +4497,55 @@ def get_detailed_monthly_sales():
 @jwt_required()
 @merchant_role_required
 def get_product_performance():
+    """
+    Get product performance analytics for the merchant
+    ---
+    tags:
+      - Merchant - Reports
+    security:
+      - Bearer: []
+    parameters:
+      - name: months
+        in: query
+        type: integer
+        required: false
+        default: 3
+        description: Number of past months to include in the analysis
+      - name: limit
+        in: query
+        type: integer
+        required: false
+        default: 3
+        description: Number of top products to return
+    responses:
+      200:
+        description: Product performance data retrieved successfully
+        schema:
+          type: object
+          properties:
+            status:
+              type: string
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  product_id:
+                    type: integer
+                  product_name:
+                    type: string
+                  total_sales:
+                    type: number
+                    format: float
+                  total_orders:
+                    type: integer
+                  units_sold:
+                    type: integer
+      401:
+        description: Unauthorized - Invalid or missing token
+      500:
+        description: Internal server error
+    """
     try:
         current_user_id = get_jwt_identity()
         
@@ -3927,6 +4577,47 @@ def get_product_performance():
 @jwt_required()
 @merchant_role_required
 def get_revenue_by_category():
+    """
+    Get revenue analytics grouped by product category for the merchant
+    ---
+    tags:
+      - Merchant - Reports
+    security:
+      - Bearer: []
+    parameters:
+      - name: months
+        in: query
+        type: integer
+        required: false
+        default: 3
+        description: Number of past months to include in the analysis
+    responses:
+      200:
+        description: Revenue by category data retrieved successfully
+        schema:
+          type: object
+          properties:
+            status:
+              type: string
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  category_id:
+                    type: integer
+                  category_name:
+                    type: string
+                  total_revenue:
+                    type: number
+                    format: float
+                  total_orders:
+                    type: integer
+      401:
+        description: Unauthorized - Invalid or missing token
+      500:
+        description: Internal server error
+    """
     try:
         current_user_id = get_jwt_identity()
         
@@ -3957,6 +4648,49 @@ def get_revenue_by_category():
 @jwt_required()
 @merchant_role_required
 def get_dashboard_summary():
+    """
+    Get dashboard summary metrics for the merchant's products
+    ---
+    tags:
+      - Merchant - Reports
+    security:
+      - Bearer: []
+    responses:
+      200:
+        description: Dashboard summary data retrieved successfully
+        schema:
+          type: object
+          properties:
+            status:
+              type: string
+            data:
+              type: object
+              properties:
+                total_products:
+                  type: integer
+                  description: Total number of products
+                total_sales:
+                  type: number
+                  format: float
+                  description: Total sales revenue
+                total_orders:
+                  type: integer
+                  description: Total number of orders
+                average_rating:
+                  type: number
+                  format: float
+                  description: Average product rating
+                low_stock_count:
+                  type: integer
+                  description: Number of products with low stock
+                out_of_stock_count:
+                  type: integer
+                  description: Number of products out of stock
+      401:
+        description: Unauthorized - Invalid or missing token
+      500:
+        description: Internal server error
+    """
     try:
         current_user_id = get_jwt_identity()
         data = MerchantReportController.get_dashboard_summary(current_user_id)
@@ -3979,6 +4713,48 @@ def get_dashboard_summary():
 @jwt_required()
 @merchant_role_required
 def get_daily_sales():
+    """
+    Get daily sales analytics for the merchant
+    ---
+    tags:
+      - Merchant - Reports
+    security:
+      - Bearer: []
+    parameters:
+      - name: days
+        in: query
+        type: integer
+        required: false
+        default: 30
+        description: Number of past days to include in the analysis
+    responses:
+      200:
+        description: Daily sales data retrieved successfully
+        schema:
+          type: object
+          properties:
+            status:
+              type: string
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  date:
+                    type: string
+                    format: date
+                  total_sales:
+                    type: number
+                    format: float
+                  total_orders:
+                    type: integer
+                  units_sold:
+                    type: integer
+      401:
+        description: Unauthorized - Invalid or missing token
+      500:
+        description: Internal server error
+    """
     try:
         current_user_id = get_jwt_identity()
         data = MerchantReportController.get_daily_sales_data(current_user_id)
@@ -4001,6 +4777,55 @@ def get_daily_sales():
 @jwt_required()
 @merchant_role_required
 def get_top_selling_products():
+    """
+    Get top selling products for the merchant
+    ---
+    tags:
+      - Merchant - Reports
+    security:
+      - Bearer: []
+    parameters:
+      - name: days
+        in: query
+        type: integer
+        required: false
+        default: 30
+        description: Number of past days to include in the analysis
+      - name: limit
+        in: query
+        type: integer
+        required: false
+        default: 4
+        description: Number of top products to return
+    responses:
+      200:
+        description: Top selling products data retrieved successfully
+        schema:
+          type: object
+          properties:
+            status:
+              type: string
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  product_id:
+                    type: integer
+                  product_name:
+                    type: string
+                  total_sales:
+                    type: number
+                    format: float
+                  total_orders:
+                    type: integer
+                  units_sold:
+                    type: integer
+      401:
+        description: Unauthorized - Invalid or missing token
+      500:
+        description: Internal server error
+    """
     try:
         current_user_id = get_jwt_identity()
         
@@ -4034,6 +4859,49 @@ def get_top_selling_products():
 @jwt_required()
 @merchant_role_required
 def get_most_viewed_products():
+    """
+    Get most viewed products for the merchant
+    ---
+    tags:
+      - Merchant - Reports
+    security:
+      - Bearer: []
+    parameters:
+      - name: limit
+        in: query
+        type: integer
+        required: false
+        default: 4
+        description: Number of top products to return
+    responses:
+      200:
+        description: Most viewed products data retrieved successfully
+        schema:
+          type: object
+          properties:
+            status:
+              type: string
+            data:
+              type: array
+              items:
+                type: object
+                properties:
+                  product_id:
+                    type: integer
+                  product_name:
+                    type: string
+                  total_views:
+                    type: integer
+                  total_orders:
+                    type: integer
+                  total_sales:
+                    type: number
+                    format: float
+      401:
+        description: Unauthorized - Invalid or missing token
+      500:
+        description: Internal server error
+    """
     try:
         current_user_id = get_jwt_identity()
         
@@ -4063,6 +4931,54 @@ def get_most_viewed_products():
 @merchant_role_required
 @jwt_required
 def change_password():
+    """
+    Change the merchant's account password
+    ---
+    tags:
+      - Merchant - Settings
+    security:
+      - Bearer: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required:
+              - current_password
+              - new_password
+            properties:
+              current_password:
+                type: string
+                description: Current password of the merchant
+              new_password:
+                type: string
+                description: New password to set
+    responses:
+      200:
+        description: Password changed successfully
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+      400:
+        description: Missing required fields or invalid password
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+      401:
+        description: Unauthorized - Invalid or missing token
+      500:
+        description: Internal server error
+        schema:
+          type: object
+          properties:
+            message:
+              type: string
+    """
     try:
         current_app.logger.debug("Change password request received")
         data = request.get_json()
@@ -4092,7 +5008,15 @@ def change_password():
 #Load Merchant Details
 @merchant_dashboard_bp.route('/account', methods=['OPTIONS'])
 def handle_account_options():
-    """Handle OPTIONS request for CORS preflight"""
+    """
+    Handle OPTIONS request for CORS preflight on the merchant account endpoint
+    ---
+    tags:
+      - Merchant - Settings
+    responses:
+      200:
+        description: CORS preflight response for account endpoint
+    """
     response = jsonify({})
     response.headers['Access-Control-Allow-Origin'] = '*'
     response.headers['Access-Control-Allow-Methods'] = 'GET, PUT, OPTIONS'
