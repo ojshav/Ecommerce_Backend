@@ -94,7 +94,7 @@ BASE_TEMPLATE = """
                     <tr>
                         <td class="header">
                             <a href="{{ frontend_url }}" target="_blank">
-                                <img src="{{ logo_url }}" alt="AOIN Logo" class="logo">
+                                <img src="{{ logo_url }}" alt="AOIN" class="logo">
                             </a>
                         </td>
                     </tr>
@@ -137,7 +137,7 @@ def send_email(to_email, subject, template_str, context):
 
         # Add base context variables to every email
         context.update({
-            'logo_url': 'https://res.cloudinary.com/dyj7ebc7z/image/upload/v1749809170/logo_w3l0tp.png', 
+            'logo_url': 'https://res.cloudinary.com/dyj7ebc7z/image/upload/v1751606177/logo_nifepq.png', 
             'frontend_url': current_app.config.get('FRONTEND_URL', '#'),
             'year': datetime.now().year,
             'subject': subject

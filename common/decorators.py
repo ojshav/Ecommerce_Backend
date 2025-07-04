@@ -1,5 +1,6 @@
 import time
 import functools
+import json
 from flask import request, jsonify, current_app
 from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
 from functools import wraps
@@ -111,16 +112,17 @@ def cache_response(timeout=300, key_prefix='cache'):
             # Try to get from cache
             cached_response = redis_client.get(key)
             if cached_response:
-                return jsonify(eval(cached_response)), 200
+                return jsonify(json.loads(cached_response)), 200
             
             # Get response from function
-            response, status_code = f(*args, **kwargs)
+            response_obj, status_code = f(*args, **kwargs)
             
             # Cache response if status code is 200
             if status_code == 200:
-                redis_client.setex(key, timeout, str(response))
+                data_to_cache = response_obj.get_json()
+                redis_client.setex(key, timeout, json.dumps(data_to_cache))
             
-            return jsonify(response), status_code
+            return response_obj, status_code
         return wrapped
     return decorator
 
