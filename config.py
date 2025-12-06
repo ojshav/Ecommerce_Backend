@@ -37,12 +37,13 @@ class Config:
     CLOUDINARY_API_SECRET = os.getenv('CLOUDINARY_API_SECRET')
     ALLOWED_IMAGE_EXTENSIONS = ['jpg', 'jpeg', 'svg', 'png', 'gif', 'webp', 'pdf', 'doc', 'docx']
 
-    MAIL_SERVER = 'smtp.gmail.com'  # Replace with your SMTP server
-    MAIL_PORT = 587  # Common ports: 587 (TLS), 465 (SSL)
-    MAIL_USE_TLS = True
-    MAIL_USE_SSL = False
-    MAIL_USERNAME = os.getenv('MAIL_USERNAME')
-    MAIL_PASSWORD = os.getenv('MAIL_PASSWORD')
+    # GoDaddy Webmail SMTP Configuration
+    MAIL_SERVER = 'smtpout.secureserver.net'  # GoDaddy SMTP server
+    MAIL_PORT = 587  # GoDaddy uses port 587 for TLS
+    MAIL_USE_TLS = True  # Enable TLS for GoDaddy
+    MAIL_USE_SSL = False  # SSL is not used when TLS is enabled
+    MAIL_USERNAME = os.getenv('MAIL_USERNAME')  # Your GoDaddy email address (e.g., noreply@yourdomain.com)
+    MAIL_PASSWORD = os.getenv('MAIL_PASSWORD')  # Your GoDaddy email password
     MAIL_DEFAULT_SENDER = (os.getenv('MAIL_SENDER_NAME', 'AOIN'), os.getenv('MAIL_USERNAME'))
 
     FRONTEND_URL = 'https://aoinstore.com'
