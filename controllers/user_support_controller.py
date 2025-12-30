@@ -7,30 +7,19 @@ from models.enums import TicketStatus, TicketPriority, TicketCreatorRole
 from werkzeug.exceptions import NotFound, Forbidden, BadRequest
 from sqlalchemy import desc, asc
 import datetime
-import cloudinary
-import cloudinary.uploader
+from services.s3_service import get_s3_service
 
 
-def _upload_to_cloudinary(file_to_upload, folder_name="support_attachments"):
+def _upload_support_attachment(file_to_upload, folder_name="support_attachments"):
     if not file_to_upload:
         return None
     try:
-        # Ensure Cloudinary is configured (keys, secret, cloud_name)
-       
-        if not (cloudinary.config().cloud_name and cloudinary.config().api_key and cloudinary.config().api_secret):
-            current_app.logger.error("Cloudinary not configured. Please set CLOUDINARY_CLOUD_NAME, API_KEY, and API_SECRET.")
-            raise Exception("Cloudinary service is not configured.")
-
-        upload_result = cloudinary.uploader.upload(
-            file_to_upload,
-            folder=f"Aoin/{folder_name}", 
-            resource_type="auto" # Let Cloudinary auto-detect
-        )
-        return upload_result.get('secure_url')
+        s3_service = get_s3_service()
+        upload_result = s3_service.upload_support_attachment(file_to_upload, folder_name)
+        return upload_result.get('url')
     except Exception as e:
-        current_app.logger.error(f"Cloudinary upload failed: {e}")
-        # Re-raise a more generic exception or a custom one
-        raise Exception(f"Cloudinary upload failed: {str(e)}")
+        current_app.logger.error(f"S3 upload failed for support attachment: {e}")
+        raise Exception(f"File upload failed: {str(e)}")
 
 
 class UserSupportTicketController:
@@ -60,7 +49,7 @@ class UserSupportTicketController:
         image_url = None
         if image_file:
             try:
-                image_url = _upload_to_cloudinary(image_file, "user_support_tickets")
+                image_url = _upload_support_attachment(image_file, "user_support_tickets")
             except Exception as e:
                 current_app.logger.error(f"Failed to upload image for user support ticket: {e}")
                 # Decide if this should fail the ticket creation or proceed without image
@@ -160,7 +149,7 @@ class UserSupportTicketController:
         attachment_url = None
         if attachment_file:
             try:
-                attachment_url = _upload_to_cloudinary(attachment_file, "user_support_attachments")
+                attachment_url = _upload_support_attachment(attachment_file, "user_support_attachments")
             except Exception as e:
                  current_app.logger.error(f"Failed to upload attachment for user support ticket message: {e}")
                  # Decide if this should fail or proceed without attachment

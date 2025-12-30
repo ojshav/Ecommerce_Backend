@@ -1,8 +1,7 @@
 from flask import Blueprint, request, jsonify, current_app, send_file
 from auth.utils import super_admin_role_required
 from flask_jwt_extended import get_jwt_identity
-import cloudinary
-import cloudinary.uploader
+from services.s3_service import get_s3_service
 from common.database import db
 from marshmallow import ValidationError
 from models.brand import Brand
@@ -233,26 +232,16 @@ def create_category():
                 return jsonify({'message': f"Invalid icon file type. Allowed types: {', '.join(ALLOWED_EXTENSIONS)}"}), HTTPStatus.BAD_REQUEST
             
             try:
+                s3_service = get_s3_service()
+                upload_result = s3_service.upload_generic_asset(file)
+                icon_url_from_s3 = upload_result.get('url')
                 
-                upload_result = cloudinary.uploader.upload(
-                    file,
-                    folder="category_icons",  
-                    resource_type="image"
-                )
+                if not icon_url_from_s3:
+                    current_app.logger.error("S3 upload succeeded but no URL was returned.")
+                    return jsonify({'message': 'S3 upload succeeded but did not return a URL.'}), HTTPStatus.INTERNAL_SERVER_ERROR
                 
-                icon_url_from_cloudinary = upload_result.get('secure_url')
-                
-                if not icon_url_from_cloudinary:
-                   
-                    current_app.logger.error("Cloudinary upload succeeded but no secure_url was returned.")
-                    return jsonify({'message': 'Cloudinary upload succeeded but did not return a URL.'}), HTTPStatus.INTERNAL_SERVER_ERROR
-                
-                
-                category_data['icon_url'] = icon_url_from_cloudinary
+                category_data['icon_url'] = icon_url_from_s3
 
-            except cloudinary.exceptions.Error as e:
-                current_app.logger.error(f"Cloudinary upload failed: {e}")
-                return jsonify({'message': f"Cloudinary icon upload failed: {str(e)}"}), HTTPStatus.INTERNAL_SERVER_ERROR
             except Exception as e: 
                 current_app.logger.error(f"An error occurred during icon file upload: {e}")
                 return jsonify({'message': f"An error occurred during icon file upload: {str(e)}"}), HTTPStatus.INTERNAL_SERVER_ERROR
@@ -411,19 +400,24 @@ def update_category(cid):
                 return jsonify({'message': f'Invalid icon file type. Allowed: {ALLOWED_EXTENSIONS}'}), HTTPStatus.BAD_REQUEST
 
             try:
-                upload_result = cloudinary.uploader.upload(
-                    file,
-                    folder="category_icons",
-                    public_id=f"category_{cid}_{file.filename.rsplit('.', 1)[0]}",
-                    overwrite=True,
-                    resource_type="image"
-                )
-                new_url = upload_result.get('secure_url')
+                # Get existing category to delete old icon
+                existing_category = Category.query.filter_by(id=cid).first()
+                if existing_category and existing_category.icon_url:
+                    try:
+                        s3_service = get_s3_service()
+                        s3_service.delete_generic_asset(existing_category.icon_url)
+                    except Exception as e:
+                        current_app.logger.warning(f"Failed to delete old category icon from S3: {str(e)}")
+                
+                # Upload new icon to S3
+                s3_service = get_s3_service()
+                upload_result = s3_service.upload_generic_asset(file)
+                new_url = upload_result.get('url')
                 if not new_url:
-                    raise ValueError("No secure_url from Cloudinary")
+                    raise ValueError("No URL from S3")
                 update_data['icon_url'] = new_url
             except Exception as e:
-                current_app.logger.error(f"Cloudinary upload failed in update: {e}")
+                current_app.logger.error(f"S3 upload failed in update: {e}")
                 return jsonify({'message': f'Icon upload failed: {str(e)}'}), HTTPStatus.INTERNAL_SERVER_ERROR
     else:
         return jsonify({'message': 'Unsupported Content-Type. Use JSON or multipart/form-data.'}), HTTPStatus.UNSUPPORTED_MEDIA_TYPE
@@ -502,6 +496,15 @@ def delete_category(cid):
         description: Internal server error
     """
     try:
+        # Get category to delete associated icon
+        category = Category.query.filter_by(id=cid).first()
+        if category and category.icon_url:
+            try:
+                s3_service = get_s3_service()
+                s3_service.delete_generic_asset(category.icon_url)
+            except Exception as e:
+                current_app.logger.warning(f"Failed to delete category icon from S3: {str(e)}")
+        
         cat = CategoryController.delete(cid)
         return jsonify(cat.serialize()), HTTPStatus.OK
     except FileNotFoundError: 
@@ -572,20 +575,22 @@ def upload_category_icon(cid):
         if not allowed_file(file.filename):
             return jsonify({'message': f"Invalid file type. Allowed types: {', '.join(ALLOWED_EXTENSIONS)}"}), HTTPStatus.BAD_REQUEST
 
-        public_id_for_cloudinary = f"category_icons/category_{cid}_{file.filename.rsplit('.', 1)[0]}"
+        # Delete old icon from S3 if it exists
+        if category.icon_url:
+            try:
+                s3_service = get_s3_service()
+                s3_service.delete_generic_asset(category.icon_url)
+            except Exception as e:
+                current_app.logger.warning(f"Failed to delete old category icon from S3: {str(e)}")
 
-        upload_result = cloudinary.uploader.upload(
-            file,
-            folder="category_icons",
-            public_id=public_id_for_cloudinary,
-            overwrite=True,
-            resource_type="image"
-        )
+        # Upload new icon to S3
+        s3_service = get_s3_service()
+        upload_result = s3_service.upload_generic_asset(file)
         
-        icon_url = upload_result.get('secure_url')
+        icon_url = upload_result.get('url')
         if not icon_url:
-            current_app.logger.error(f"Cloudinary upload for category {cid} succeeded but no secure_url.")
-            return jsonify({'message': 'Cloudinary did not return a URL'}), HTTPStatus.INTERNAL_SERVER_ERROR
+            current_app.logger.error(f"S3 upload for category {cid} succeeded but no URL.")
+            return jsonify({'message': 'S3 did not return a URL'}), HTTPStatus.INTERNAL_SERVER_ERROR
 
         category.icon_url = icon_url
        
@@ -595,10 +600,6 @@ def upload_category_icon(cid):
             'message': 'Icon uploaded and category updated successfully',
             'category': category.serialize()
         }), HTTPStatus.OK
-
-    except cloudinary.exceptions.Error as e:
-        current_app.logger.error(f"Cloudinary upload failed for category {cid}: {e}")
-        return jsonify({'message': f"Cloudinary upload failed: {str(e)}"}), HTTPStatus.INTERNAL_SERVER_ERROR
    
     except Exception as e:
         db.session.rollback()
@@ -743,18 +744,12 @@ def approve_brand_request(rid):
             if not allowed_file(file.filename):
                 return jsonify({'message': f"Invalid brand icon file type. Allowed types: {', '.join(ALLOWED_EXTENSIONS)}"}), HTTPStatus.BAD_REQUEST
             try:
-                upload_result = cloudinary.uploader.upload(
-                    file,
-                    folder="brand_icons",
-                    resource_type="image"
-                )
-                icon_url_from_cloudinary = upload_result.get('secure_url')
+                s3_service = get_s3_service()
+                upload_result = s3_service.upload_generic_asset(file)
+                icon_url_from_cloudinary = upload_result.get('url')
                 if not icon_url_from_cloudinary:
-                    current_app.logger.error(f"Cloudinary upload for brand request {rid} succeeded but no secure_url.")
-                    return jsonify({'message': 'Cloudinary upload succeeded but did not return a URL.'}), HTTPStatus.INTERNAL_SERVER_ERROR
-            except cloudinary.exceptions.Error as e:
-                current_app.logger.error(f"Cloudinary upload failed for brand request {rid}: {e}")
-                return jsonify({'message': f"Cloudinary icon upload failed: {str(e)}"}), HTTPStatus.INTERNAL_SERVER_ERROR
+                    current_app.logger.error(f"S3 upload for brand request {rid} succeeded but no URL.")
+                    return jsonify({'message': 'S3 upload succeeded but did not return a URL.'}), HTTPStatus.INTERNAL_SERVER_ERROR
             except Exception as e:
                 current_app.logger.error(f"Error during brand icon file upload for request {rid}: {e}")
                 return jsonify({'message': f"An error occurred during brand icon file upload: {str(e)}"}), HTTPStatus.INTERNAL_SERVER_ERROR
@@ -1046,15 +1041,13 @@ def create_brand_directly():
             if not allowed_file(file.filename):
                 return jsonify({'message': f"Invalid icon file type. Allowed types: {', '.join(ALLOWED_EXTENSIONS)}"}), HTTPStatus.BAD_REQUEST
             try:
-                upload_result = cloudinary.uploader.upload(file, folder="brand_icons", resource_type="image")
-                icon_url_from_cloudinary = upload_result.get('secure_url')
-                if not icon_url_from_cloudinary:
-                    current_app.logger.error("Cloudinary brand icon upload (direct create) succeeded but no secure_url.")
-                    return jsonify({'message': 'Cloudinary upload did not return a URL.'}), HTTPStatus.INTERNAL_SERVER_ERROR
-                brand_data['icon_url'] = icon_url_from_cloudinary 
-            except cloudinary.exceptions.Error as e:
-                current_app.logger.error(f"Cloudinary icon upload failed (direct brand create): {e}")
-                return jsonify({'message': f"Cloudinary icon upload failed: {str(e)}"}), HTTPStatus.INTERNAL_SERVER_ERROR
+                s3_service = get_s3_service()
+                upload_result = s3_service.upload_generic_asset(file)
+                icon_url_from_s3 = upload_result.get('url')
+                if not icon_url_from_s3:
+                    current_app.logger.error("S3 brand icon upload (direct create) succeeded but no URL.")
+                    return jsonify({'message': 'S3 upload did not return a URL.'}), HTTPStatus.INTERNAL_SERVER_ERROR
+                brand_data['icon_url'] = icon_url_from_s3 
             except Exception as e:
                 current_app.logger.error(f"An error occurred during icon file upload (direct brand create): {e}")
                 return jsonify({'message': f"An error occurred during icon file upload: {str(e)}"}), HTTPStatus.INTERNAL_SERVER_ERROR
@@ -1133,20 +1126,22 @@ def upload_brand_icon(bid):
         if not allowed_file(file.filename):
             return jsonify({'message': f"Invalid file type. Allowed types: {', '.join(ALLOWED_EXTENSIONS)}"}), HTTPStatus.BAD_REQUEST
 
-        public_id_for_cloudinary = f"brand_icons/brand_{bid}_{file.filename.rsplit('.', 1)[0]}"
+        # Delete old icon from S3 if it exists
+        if brand.icon_url:
+            try:
+                s3_service = get_s3_service()
+                s3_service.delete_generic_asset(brand.icon_url)
+            except Exception as e:
+                current_app.logger.warning(f"Failed to delete old brand icon from S3: {str(e)}")
 
-        upload_result = cloudinary.uploader.upload(
-            file,
-            folder="brand_icons",
-            public_id=public_id_for_cloudinary,
-            overwrite=True,
-            resource_type="image"
-        )
+        # Upload new icon to S3
+        s3_service = get_s3_service()
+        upload_result = s3_service.upload_generic_asset(file)
         
-        icon_url = upload_result.get('secure_url')
+        icon_url = upload_result.get('url')
         if not icon_url:
-            current_app.logger.error(f"Cloudinary upload for brand {bid} succeeded but no secure_url.")
-            return jsonify({'message': 'Cloudinary did not return a URL'}), HTTPStatus.INTERNAL_SERVER_ERROR
+            current_app.logger.error(f"S3 upload for brand {bid} succeeded but no URL.")
+            return jsonify({'message': 'S3 did not return a URL'}), HTTPStatus.INTERNAL_SERVER_ERROR
 
         brand.icon_url = icon_url
         db.session.add(brand)
@@ -1156,10 +1151,6 @@ def upload_brand_icon(bid):
             'message': 'Brand icon uploaded and updated successfully',
             'brand': brand.serialize()
         }), HTTPStatus.OK
-
-    except cloudinary.exceptions.Error as e:
-        current_app.logger.error(f"Cloudinary upload failed for brand {bid}: {e}")
-        return jsonify({'message': f"Cloudinary upload failed: {str(e)}"}), HTTPStatus.INTERNAL_SERVER_ERROR
     except Exception as e:
         db.session.rollback()
         current_app.logger.error(f"Error uploading icon for brand {bid}: {e}")
@@ -1276,19 +1267,24 @@ def update_brand(bid):
                 return jsonify({'message': f'Invalid icon file type. Allowed: {ALLOWED_EXTENSIONS}'}), HTTPStatus.BAD_REQUEST
 
             try:
-                upload_result = cloudinary.uploader.upload(
-                    file,
-                    folder="brand_icons",
-                    public_id=f"brand_{bid}_{file.filename.rsplit('.', 1)[0]}",
-                    overwrite=True,
-                    resource_type="image"
-                )
-                new_url = upload_result.get('secure_url')
+                # Get existing brand to delete old icon
+                existing_brand = Brand.query.filter_by(brand_id=bid).first()
+                if existing_brand and existing_brand.icon_url:
+                    try:
+                        s3_service = get_s3_service()
+                        s3_service.delete_generic_asset(existing_brand.icon_url)
+                    except Exception as e:
+                        current_app.logger.warning(f"Failed to delete old brand icon from S3: {str(e)}")
+                
+                # Upload new icon to S3
+                s3_service = get_s3_service()
+                upload_result = s3_service.upload_generic_asset(file)
+                new_url = upload_result.get('url')
                 if not new_url:
-                    raise ValueError("No secure_url from Cloudinary")
+                    raise ValueError("No URL from S3")
                 update_data['icon_url'] = new_url
             except Exception as e:
-                current_app.logger.error(f"Cloudinary upload failed in update: {e}")
+                current_app.logger.error(f"S3 upload failed in update: {e}")
                 return jsonify({'message': f'Icon upload failed: {str(e)}'}), HTTPStatus.INTERNAL_SERVER_ERROR
     else:
         return jsonify({'message': 'Unsupported Content-Type. Use JSON or multipart/form-data.'}), HTTPStatus.UNSUPPORTED_MEDIA_TYPE
@@ -1342,6 +1338,15 @@ def delete_brand(bid):
         description: Internal server error
     """
     try:
+        # Get brand to delete associated icon
+        brand = Brand.query.filter_by(brand_id=bid).first()
+        if brand and brand.icon_url:
+            try:
+                s3_service = get_s3_service()
+                s3_service.delete_generic_asset(brand.icon_url)
+            except Exception as e:
+                current_app.logger.warning(f"Failed to delete brand icon from S3: {str(e)}")
+        
         BrandController.delete(bid)
         return '', HTTPStatus.NO_CONTENT
     except Exception as e:

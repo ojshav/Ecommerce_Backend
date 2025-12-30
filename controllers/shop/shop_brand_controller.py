@@ -1,4 +1,4 @@
-from flask import request, jsonify
+from flask import request, jsonify, current_app
 from common.database import db
 from models.shop.shop_brand import ShopBrand
 from models.shop.shop import Shop
@@ -7,7 +7,7 @@ from common.decorators import superadmin_required
 from datetime import datetime, timezone
 from sqlalchemy import desc, or_
 import re
-import cloudinary.uploader
+from services.s3_service import get_s3_service
 from http import HTTPStatus
 
 class ShopBrandController:
@@ -128,17 +128,17 @@ class ShopBrandController:
                             }), HTTPStatus.BAD_REQUEST
                         
                         try:
-                            # Upload to Cloudinary
-                            upload_result = cloudinary.uploader.upload(
-                                logo_file,
-                                folder="brand_logos",
-                                resource_type="auto",
-                                transformation=[
-                                    {'width': 200, 'height': 200, 'crop': 'fit', 'quality': 'auto'}
-                                ]
-                            )
-                            logo_url = upload_result.get('secure_url')
+                            # Upload to S3
+                            s3_service = get_s3_service()
+                            upload_result = s3_service.upload_generic_asset(logo_file)
+                            logo_url = upload_result.get('url')
+                            if not logo_url:
+                                return jsonify({
+                                    'status': 'error',
+                                    'message': 'Failed to upload image - no URL returned'
+                                }), HTTPStatus.INTERNAL_SERVER_ERROR
                         except Exception as upload_error:
+                            current_app.logger.error(f"Brand logo upload failed: {str(upload_error)}")
                             return jsonify({
                                 'status': 'error',
                                 'message': f'Failed to upload image: {str(upload_error)}'
@@ -281,16 +281,11 @@ class ShopBrandController:
                             }), HTTPStatus.BAD_REQUEST
                         
                         try:
-                            # Upload to Cloudinary
-                            upload_result = cloudinary.uploader.upload(
-                                logo_file,
-                                folder="brand_logos",
-                                resource_type="auto",
-                                transformation=[
-                                    {'width': 200, 'height': 200, 'crop': 'fit', 'quality': 'auto'}
-                                ]
-                            )
-                            logo_url = upload_result.get('secure_url')
+                            # Upload to S3
+                            from services.s3_service import get_s3_service
+                            s3_service = get_s3_service()
+                            upload_result = s3_service.upload_generic_asset(logo_file)
+                            logo_url = upload_result.get('url')
                             data['logo_url'] = logo_url
                         except Exception as upload_error:
                             return jsonify({

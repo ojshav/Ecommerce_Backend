@@ -98,10 +98,15 @@ def cache_response(timeout=300, key_prefix='cache'):
             if request.method != 'GET':
                 return f(*args, **kwargs)
             
-            # Get Redis client
-            redis_client = get_redis_client(current_app)
-            if not redis_client:
-                # If Redis is not available, skip caching
+            # Get Redis client - handle errors gracefully
+            try:
+                redis_client = get_redis_client(current_app)
+                if not redis_client:
+                    # If Redis is not available, skip caching
+                    return f(*args, **kwargs)
+            except Exception as e:
+                # If Redis connection fails, log and skip caching
+                current_app.logger.warning(f"Redis not available for caching: {str(e)}")
                 return f(*args, **kwargs)
             
             # Generate cache key
@@ -110,17 +115,25 @@ def cache_response(timeout=300, key_prefix='cache'):
             key = f"{key_prefix}:{path}:{query}"
             
             # Try to get from cache
-            cached_response = redis_client.get(key)
-            if cached_response:
-                return jsonify(json.loads(cached_response)), 200
+            try:
+                cached_response = redis_client.get(key)
+                if cached_response:
+                    return jsonify(json.loads(cached_response)), 200
+            except Exception as e:
+                # If cache read fails, continue without cache
+                current_app.logger.warning(f"Cache read failed: {str(e)}")
             
             # Get response from function
             response_obj, status_code = f(*args, **kwargs)
             
             # Cache response if status code is 200
             if status_code == 200:
-                data_to_cache = response_obj.get_json()
-                redis_client.setex(key, timeout, json.dumps(data_to_cache))
+                try:
+                    data_to_cache = response_obj.get_json()
+                    redis_client.setex(key, timeout, json.dumps(data_to_cache))
+                except Exception as e:
+                    # If cache write fails, log but don't fail the request
+                    current_app.logger.warning(f"Cache write failed: {str(e)}")
             
             return response_obj, status_code
         return wrapped

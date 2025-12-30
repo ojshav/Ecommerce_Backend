@@ -1,5 +1,5 @@
 # controllers/shop/shop_variant_media_controller.py
-from flask import request, jsonify
+from flask import request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from models.shop.shop_product import ShopProduct
 from models.shop.shop_product_variant import ShopProductVariant
@@ -11,6 +11,7 @@ import json
 from datetime import datetime, timezone
 import cloudinary
 import cloudinary.uploader
+from services.s3_service import get_s3_service
 from werkzeug.utils import secure_filename
 import os
 
@@ -98,22 +99,35 @@ class ShopVariantMediaController:
                     
                     # Determine media type from file content
                     file_media_type = MediaType.IMAGE
+                    is_video = False
                     if file.content_type and file.content_type.startswith('video/'):
                         file_media_type = MediaType.VIDEO
+                        is_video = True
                     
-                    # Upload to Cloudinary
                     try:
-                        # Generate folder path for organization
-                        folder_path = f"shop_{variant_product.shop_id}/products/variants/{variant_product.product_id}"
+                        upload_result = None
                         
-                        # Upload file
-                        upload_result = cloudinary.uploader.upload(
-                            file,
-                            folder=folder_path,
-                            resource_type="auto",  # Automatically detect image/video
-                            quality="auto",
-                            fetch_format="auto"
-                        )
+                        if is_video:
+                            # Videos still go to Cloudinary
+                            folder_path = f"shop_{variant_product.shop_id}/products/variants/{variant_product.product_id}"
+                            upload_result = cloudinary.uploader.upload(
+                                file,
+                                folder=folder_path,
+                                resource_type="video",
+                                quality="auto",
+                                fetch_format="auto"
+                            )
+                        else:
+                            # Images go to S3
+                            s3_service = get_s3_service()
+                            upload_result = s3_service.upload_variant_image(
+                                file,
+                                variant_product.shop_id,
+                                variant_product.product_id
+                            )
+                        
+                        if not upload_result:
+                            raise Exception("Upload failed - no result returned")
                         
                         # Determine sort order
                         max_sort_order = db.session.query(
@@ -124,16 +138,30 @@ class ShopVariantMediaController:
                         ).scalar() or 0
                         
                         # Create media record
-                        media = ShopProductMedia(
-                            product_id=variant_product.product_id,
-                            type=file_media_type,
-                            url=upload_result['secure_url'],
-                            public_id=upload_result['public_id'],
-                            sort_order=max_sort_order + i + 1,
-                            is_primary=is_primary and i == 0,  # Only first file can be primary
-                            file_size=upload_result.get('bytes'),
-                            file_name=filename
-                        )
+                        if is_video:
+                            # Cloudinary response format
+                            media = ShopProductMedia(
+                                product_id=variant_product.product_id,
+                                type=file_media_type,
+                                url=upload_result['secure_url'],
+                                public_id=upload_result['public_id'],
+                                sort_order=max_sort_order + i + 1,
+                                is_primary=is_primary and i == 0,
+                                file_size=upload_result.get('bytes'),
+                                file_name=filename
+                            )
+                        else:
+                            # S3 response format
+                            media = ShopProductMedia(
+                                product_id=variant_product.product_id,
+                                type=file_media_type,
+                                url=upload_result['url'],
+                                public_id=upload_result['s3_key'],  # Store S3 key in public_id
+                                sort_order=max_sort_order + i + 1,
+                                is_primary=is_primary and i == 0,
+                                file_size=upload_result.get('bytes', 0),
+                                file_name=filename
+                            )
                         
                         db.session.add(media)
                         db.session.flush()  # Get the media_id
@@ -142,7 +170,7 @@ class ShopVariantMediaController:
                         
                     except Exception as upload_error:
                         # Log the error but continue with other files
-                        print(f"Failed to upload file {filename}: {str(upload_error)}")
+                        current_app.logger.error(f"Failed to upload file {filename}: {str(upload_error)}")
                         continue
                 
                 if not uploaded_media:
@@ -324,13 +352,21 @@ class ShopVariantMediaController:
             db.session.begin()
             
             try:
-                # Delete from Cloudinary
+                # Delete from storage (S3 for images, Cloudinary for videos)
                 if media.public_id:
                     try:
-                        cloudinary.uploader.destroy(media.public_id)
-                    except Exception as cloudinary_error:
-                        print(f"Failed to delete from Cloudinary: {str(cloudinary_error)}")
-                        # Continue with database deletion even if Cloudinary fails
+                        if media.type == MediaType.VIDEO:
+                            # Delete video from Cloudinary
+                            cloudinary.uploader.destroy(media.public_id)
+                            current_app.logger.info(f"Deleted video {media.public_id} from Cloudinary")
+                        else:
+                            # Delete image from S3
+                            s3_service = get_s3_service()
+                            s3_service.delete_variant_image(media.public_id)
+                            current_app.logger.info(f"Deleted image {media.public_id} from S3")
+                    except Exception as delete_error:
+                        current_app.logger.error(f"Failed to delete media from storage: {str(delete_error)}")
+                        # Continue with database deletion even if storage delete fails
                 
                 # Soft delete from database
                 media.deleted_at = datetime.now(timezone.utc)

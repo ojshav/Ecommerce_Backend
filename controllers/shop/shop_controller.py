@@ -112,13 +112,12 @@ class ShopController:
                         }), HTTPStatus.BAD_REQUEST
                     
                     try:
-                        upload_result = cloudinary.uploader.upload(
-                            file,
-                            folder="shop_logos",
-                            resource_type="image"
-                        )
+                        from services.s3_service import get_s3_service
+                        from flask import current_app
+                        s3_service = get_s3_service()
+                        upload_result = s3_service.upload_generic_asset(file)
                         
-                        logo_url = upload_result.get('secure_url')
+                        logo_url = upload_result.get('url')
                         
                         if not logo_url:
                             return jsonify({
@@ -126,12 +125,9 @@ class ShopController:
                                 'message': 'Logo upload failed - no URL returned'
                             }), HTTPStatus.INTERNAL_SERVER_ERROR
                         
-                    except cloudinary.exceptions.Error as e:
-                        return jsonify({
-                            'status': 'error',
-                            'message': f"Logo upload failed: {str(e)}"
-                        }), HTTPStatus.INTERNAL_SERVER_ERROR
                     except Exception as e:
+                        from flask import current_app
+                        current_app.logger.error(f"Shop logo upload failed: {str(e)}")
                         return jsonify({
                             'status': 'error',
                             'message': f"Error during logo upload: {str(e)}"
@@ -226,13 +222,11 @@ class ShopController:
                         }), HTTPStatus.BAD_REQUEST
                     
                     try:
-                        upload_result = cloudinary.uploader.upload(
-                            file,
-                            folder="shop_logos",
-                            resource_type="image"
-                        )
+                        from services.s3_service import get_s3_service
+                        s3_service = get_s3_service()
+                        upload_result = s3_service.upload_generic_asset(file)
                         
-                        logo_url = upload_result.get('secure_url')
+                        logo_url = upload_result.get('url')
                         
                         if not logo_url:
                             return jsonify({

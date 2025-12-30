@@ -57,22 +57,42 @@ def role_required(required_roles):
     def decorator(fn):
         @wraps(fn)
         def wrapper(*args, **kwargs):
-            # Verify JWT token
-            verify_jwt_in_request()
+            # Add logging for media uploads
+            if '/products/' in request.path and '/media' in request.path:
+                print(f"[ROLE_CHECK] Starting role check for {request.method} {request.path}")
             
-            # Get current user identity
-            current_user_id = get_jwt_identity()
-            
-            # Get user from database
-            user = User.get_by_id(current_user_id)
-            if not user:
-                return jsonify({"error": "User not found"}), 404
-            
-            # Check if user has required role
-            if user.role.value not in required_roles:
-                return jsonify({"error": "Insufficient permissions"}), 403
-            
-            return fn(*args, **kwargs)
+            try:
+                # Verify JWT token
+                verify_jwt_in_request()
+                if '/products/' in request.path and '/media' in request.path:
+                    print(f"[ROLE_CHECK] JWT verified")
+                
+                # Get current user identity
+                current_user_id = get_jwt_identity()
+                if '/products/' in request.path and '/media' in request.path:
+                    print(f"[ROLE_CHECK] User ID: {current_user_id}")
+                
+                # Get user from database
+                user = User.get_by_id(current_user_id)
+                if not user:
+                    if '/products/' in request.path and '/media' in request.path:
+                        print(f"[ROLE_CHECK] User not found")
+                    return jsonify({"error": "User not found"}), 404
+                
+                # Check if user has required role
+                if user.role.value not in required_roles:
+                    if '/products/' in request.path and '/media' in request.path:
+                        print(f"[ROLE_CHECK] Insufficient permissions. User role: {user.role.value}, Required: {required_roles}")
+                    return jsonify({"error": "Insufficient permissions"}), 403
+                
+                if '/products/' in request.path and '/media' in request.path:
+                    print(f"[ROLE_CHECK] Role check passed, calling function")
+                
+                return fn(*args, **kwargs)
+            except Exception as e:
+                if '/products/' in request.path and '/media' in request.path:
+                    print(f"[ROLE_CHECK] Error in role check: {e}")
+                raise
         return wrapper
     return decorator
 
@@ -82,7 +102,16 @@ def user_role_required(fn):
 
 def merchant_role_required(fn):
     """Decorator for endpoints that require merchant role."""
-    return role_required([UserRole.MERCHANT.value])(fn)
+    decorated_fn = role_required([UserRole.MERCHANT.value])(fn)
+    
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        # Add logging to see if decorator is being called
+        if '/products/' in request.path and '/media' in request.path:
+            print(f"[DECORATOR] merchant_role_required called for {request.method} {request.path}")
+        # Call the decorated function
+        return decorated_fn(*args, **kwargs)
+    return wrapper
 
 def admin_role_required(fn):
     """Decorator for endpoints that require admin role."""

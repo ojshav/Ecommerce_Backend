@@ -1,7 +1,5 @@
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt_identity
-import cloudinary
-import cloudinary.uploader
 from sqlalchemy.exc import IntegrityError
 from datetime import datetime
 from http import HTTPStatus
@@ -11,6 +9,7 @@ from common.database import db
 from auth.models.merchant_document import MerchantDocument, DocumentType, DocumentStatus
 from auth.models.models import User, UserRole
 from auth.models.models import MerchantProfile, VerificationStatus
+from services.s3_service import get_s3_service
 
 document_bp = Blueprint('document', __name__, url_prefix='/api/merchant/documents')
 
@@ -19,29 +18,12 @@ ALLOWED_MIME_TYPES = {
     'application/pdf',
     'image/jpeg',
     'image/png',
+    'image/webp',
+    'application/msword',  # DOC
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',  # DOCX
     'application/vnd.ms-excel',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     'text/csv'
-}
-
-# Map MIME types to Cloudinary resource types
-CLOUDINARY_RESOURCE_TYPES = {
-    'application/pdf': 'raw',
-    'image/jpeg': 'image',
-    'image/png': 'image',
-    'application/vnd.ms-excel': 'raw',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'raw',
-    'text/csv': 'raw'
-}
-
-# Map MIME types to Cloudinary formats
-CLOUDINARY_FORMATS = {
-    'application/pdf': 'pdf',
-    'image/jpeg': 'jpg',
-    'image/png': 'png',
-    'application/vnd.ms-excel': 'xls',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
-    'text/csv': 'csv'
 }
 
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
@@ -63,13 +45,6 @@ def validate_file(file):
     
     return True, None
 
-def get_cloudinary_resource_type(mime_type):
-    """Get the appropriate Cloudinary resource type for a given MIME type."""
-    return CLOUDINARY_RESOURCE_TYPES.get(mime_type, 'raw')
-
-def get_cloudinary_format(mime_type):
-    """Get the appropriate Cloudinary format for a given MIME type."""
-    return CLOUDINARY_FORMATS.get(mime_type)
 
 @document_bp.route('/upload', methods=['POST'])
 @jwt_required()
@@ -135,48 +110,22 @@ def upload_document():
         existing_doc = MerchantDocument.get_by_merchant_and_type(merchant.id, document_type)
         
         try:
-            # Determine resource type and format based on file type
-            resource_type = get_cloudinary_resource_type(file.mimetype)
-            format = get_cloudinary_format(file.mimetype)
-            
-            # Prepare upload options
-            upload_options = {
-                'folder': f"merchant_documents/{merchant.id}",
-                'resource_type': resource_type,
-                'use_filename': True,
-                'unique_filename': True
-            }
-            
-            # Add format for PDFs and other raw files
-            if format:
-                upload_options['format'] = format
-            
-            # Add specific options for PDFs
-            if file.mimetype == 'application/pdf':
-                upload_options.update({
-                    'resource_type': 'raw',
-                    'format': 'pdf',
-                    'type': 'upload'  # Explicitly set as public
-                })
-                current_app.logger.debug(f"PDF upload options: {upload_options}")
-            
-            # Upload to Cloudinary with appropriate options
-            upload_result = cloudinary.uploader.upload(
-                file,
-                **upload_options
-            )
-            current_app.logger.debug(f"Cloudinary upload result: {upload_result}")
+            # Upload to S3
+            s3_service = get_s3_service()
+            upload_result = s3_service.upload_merchant_document(file, merchant.id)
+            current_app.logger.info(f"S3 upload result: {upload_result}")
             
             if existing_doc:
-                # Delete old file from Cloudinary
+                # Delete old file from S3
                 try:
-                    cloudinary.uploader.destroy(existing_doc.public_id)
-                except cloudinary.exceptions.Error as e:
-                    current_app.logger.warning(f"Failed to delete old file from Cloudinary: {str(e)}")
+                    s3_service.delete_merchant_document(existing_doc.public_id)
+                except Exception as e:
+                    current_app.logger.warning(f"Failed to delete old file from S3: {str(e)}")
                 
                 # Update existing document
-                existing_doc.public_id = upload_result['public_id']
-                existing_doc.file_url = upload_result['secure_url']
+                # public_id now stores the S3 key instead of Cloudinary public_id
+                existing_doc.public_id = upload_result['s3_key']
+                existing_doc.file_url = upload_result['url']
                 existing_doc.file_name = file.filename
                 existing_doc.file_size = upload_result['bytes']
                 existing_doc.mime_type = file.mimetype
@@ -198,11 +147,12 @@ def upload_document():
                 }), HTTPStatus.OK
             else:
                 # Create new document record
+                # public_id now stores the S3 key instead of Cloudinary public_id
                 document = MerchantDocument(
                     merchant_id=merchant.id,
                     document_type=document_type,
-                    public_id=upload_result['public_id'],
-                    file_url=upload_result['secure_url'],
+                    public_id=upload_result['s3_key'],
+                    file_url=upload_result['url'],
                     file_name=file.filename,
                     file_size=upload_result['bytes'],
                     mime_type=file.mimetype,
@@ -226,8 +176,8 @@ def upload_document():
                     }
                 }), HTTPStatus.CREATED
                 
-        except cloudinary.exceptions.Error as e:
-            current_app.logger.error(f"Cloudinary upload error: {str(e)}")
+        except Exception as e:
+            current_app.logger.error(f"S3 upload error: {str(e)}", exc_info=True)
             db.session.rollback()
             return jsonify({
                 'message': 'Failed to upload file to storage',
@@ -298,18 +248,78 @@ def get_documents():
     try:
         current_user = User.get_by_id(get_jwt_identity())
         if not current_user:
+            current_app.logger.warning("get_documents: Unauthorized - user not found")
             return jsonify({'message': 'Unauthorized'}), HTTPStatus.FORBIDDEN
         
+        # Check user role FIRST - admins/superadmins can always use query parameter
+        is_admin = current_user.role in [UserRole.ADMIN, UserRole.SUPER_ADMIN]
         merchant = MerchantProfile.get_by_user_id(current_user.id)
-        if not merchant and current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
+        
+        # Determine merchant_id based on user role
+        merchant_id = None
+        if is_admin:
+            # Admins/Superadmins can specify merchant_id in query params (even if they have a merchant profile)
+            merchant_id_str = request.args.get('merchant_id')
+            if not merchant_id_str:
+                # If no query param and admin has merchant profile, use their own
+                if merchant:
+                    merchant_id = merchant.id
+                    current_app.logger.info(f"get_documents: Admin {current_user.id} with merchant profile using their own merchant_id={merchant_id}")
+                else:
+                    current_app.logger.warning(f"get_documents: Admin {current_user.id} did not provide merchant_id and has no merchant profile")
+                    return jsonify({'message': 'Merchant ID required for admins'}), HTTPStatus.BAD_REQUEST
+            else:
+                try:
+                    merchant_id = int(merchant_id_str)
+                    current_app.logger.info(f"get_documents: Admin {current_user.id} requesting documents for merchant_id={merchant_id}")
+                except (ValueError, TypeError) as e:
+                    current_app.logger.error(f"get_documents: Invalid merchant_id format '{merchant_id_str}': {str(e)}")
+                    return jsonify({'message': 'Invalid merchant_id format. Must be an integer.'}), HTTPStatus.BAD_REQUEST
+        elif merchant:
+            # Regular merchant users get their own documents (ignore query parameter for security)
+            merchant_id = merchant.id
+            current_app.logger.info(f"get_documents: Merchant user {current_user.id} requesting their own documents (merchant_id={merchant_id})")
+        else:
+            current_app.logger.warning(f"get_documents: User {current_user.id} with role {current_user.role} not authorized and has no merchant profile")
             return jsonify({'message': 'Merchant profile not found or unauthorized'}), HTTPStatus.FORBIDDEN
         
-        # Admins can specify merchant_id in query params
-        merchant_id = merchant.id if merchant else request.args.get('merchant_id', type=int)
         if not merchant_id:
-            return jsonify({'message': 'Merchant ID required for admins'}), HTTPStatus.BAD_REQUEST
+            current_app.logger.error("get_documents: merchant_id is None after processing")
+            return jsonify({'message': 'Merchant ID required'}), HTTPStatus.BAD_REQUEST
         
-        documents = MerchantDocument.get_by_merchant_id(merchant_id)
+        # Verify merchant exists
+        merchant_profile = MerchantProfile.get_by_id(merchant_id)
+        if not merchant_profile:
+            current_app.logger.warning(f"get_documents: Merchant profile with id={merchant_id} (type: {type(merchant_id).__name__}) not found")
+            return jsonify({'message': 'Merchant not found'}), HTTPStatus.NOT_FOUND
+        
+        current_app.logger.info(f"get_documents: Merchant profile found: id={merchant_profile.id}, user_id={merchant_profile.user_id}")
+        
+        # Get documents for the merchant - use the same query pattern as admin endpoint
+        # Ensure merchant_id is an integer for the query
+        documents = MerchantDocument.query.filter_by(merchant_id=int(merchant_id)).all()
+        current_app.logger.info(f"get_documents: Query executed with merchant_id={merchant_id} (type: {type(merchant_id).__name__}), Found {len(documents)} documents")
+        
+        # Debug: Log document details
+        if len(documents) == 0:
+            # Check if documents exist with a different query
+            all_docs_count = MerchantDocument.query.count()
+            merchant_docs_count = MerchantDocument.query.filter_by(merchant_id=int(merchant_id)).count()
+            # Also try with merchant_profile.id to see if there's a mismatch
+            profile_docs_count = MerchantDocument.query.filter_by(merchant_id=merchant_profile.id).count()
+            current_app.logger.warning(
+                f"get_documents: No documents found. "
+                f"Total docs in DB: {all_docs_count}, "
+                f"Docs for merchant_id={merchant_id}: {merchant_docs_count}, "
+                f"Docs for merchant_profile.id={merchant_profile.id}: {profile_docs_count}"
+            )
+            # Try alternative query to see all documents for debugging
+            all_merchant_docs = MerchantDocument.query.all()
+            current_app.logger.debug(f"get_documents: All documents in DB: {[(d.id, d.merchant_id, d.document_type.value) for d in all_merchant_docs[:10]]}")
+        else:
+            for doc in documents:
+                current_app.logger.info(f"get_documents: Document ID={doc.id}, type={doc.document_type.value}, status={doc.status.value}, merchant_id={doc.merchant_id}")
+        
         return jsonify({
             'documents': [{
                 'id': doc.id,
@@ -324,6 +334,7 @@ def get_documents():
             } for doc in documents]
         }), HTTPStatus.OK
     except Exception as e:
+        current_app.logger.error(f"get_documents: Unexpected error: {str(e)}", exc_info=True)
         return jsonify({'message': f"An error occurred: {str(e)}"}), HTTPStatus.INTERNAL_SERVER_ERROR
 
 @document_bp.route('/<int:id>', methods=['GET'])
@@ -641,14 +652,21 @@ def delete_document(id):
            current_user.role not in [UserRole.ADMIN, UserRole.SUPER_ADMIN]:
             return jsonify({'message': 'Unauthorized'}), HTTPStatus.FORBIDDEN
         
-        # Delete from Cloudinary first
+        # Delete from S3 first
         try:
-            cloudinary.uploader.destroy(document.public_id)
-        except cloudinary.exceptions.Error as e:
-            return jsonify({'message': f"Failed to delete file from storage: {str(e)}"}), HTTPStatus.INTERNAL_SERVER_ERROR
+            s3_service = get_s3_service()
+            # public_id now stores the S3 key
+            deleted = s3_service.delete_merchant_document(document.public_id)
+            if not deleted:
+                current_app.logger.warning(f"Failed to delete file from S3: {document.public_id}")
+        except Exception as e:
+            current_app.logger.error(f"Error deleting file from S3: {str(e)}")
+            # Continue with database deletion even if S3 deletion fails
+            # (file might have been already deleted or not exist)
         
         # Delete from database
-        document.delete()
+        db.session.delete(document)
+        db.session.commit()
         
         return jsonify({'message': 'Document deleted successfully'}), HTTPStatus.OK
     except Exception as e:

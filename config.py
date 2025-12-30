@@ -26,10 +26,11 @@ class Config:
     GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_CLIENT_SECRET')
     GOOGLE_DISCOVERY_URL = 'https://accounts.google.com/.well-known/openid-configuration'
 
-    # Redis Cache
-    REDIS_URL = os.getenv('REDIS_URL', 'redis://localhost:6379/0')
-    CACHE_TYPE = 'redis'
+    # Redis Cache - DISABLED by default to avoid connection errors
+    # Set CACHE_TYPE='redis' and REDIS_URL in environment if you want to use Redis
+    CACHE_TYPE = 'null'  # Always use null cache - no Redis connection attempts
     CACHE_DEFAULT_TIMEOUT = 300  # 5 minutes
+    # Don't set REDIS_URL or CACHE_REDIS_URL - this prevents Flask-Caching from trying to connect
 
     # Cloudinary
     CLOUDINARY_CLOUD_NAME = os.getenv('CLOUDINARY_CLOUD_NAME')
@@ -46,7 +47,7 @@ class Config:
     MAIL_PASSWORD = os.getenv('MAIL_PASSWORD')  # Your GoDaddy email password
     MAIL_DEFAULT_SENDER = (os.getenv('MAIL_SENDER_NAME', 'AOIN'), os.getenv('MAIL_USERNAME'))
 
-    FRONTEND_URL = 'https://aoinstore.com'
+    FRONTEND_URL = 'http://localhost:5173'
 
     EXCHANGE_RATE_API_KEY = os.getenv('EXCHANGE_RATE_API_KEY', 'f60545f362ec1fdd1e5e7338')
     CARD_ENCRYPTION_KEY = os.getenv('CARD_ENCRYPTION_KEY')

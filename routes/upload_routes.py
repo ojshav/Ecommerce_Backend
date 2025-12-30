@@ -1,8 +1,7 @@
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required
 from werkzeug.utils import secure_filename
-import cloudinary
-import cloudinary.uploader
+from services.s3_service import get_s3_service
 from http import HTTPStatus
 import os
 
@@ -20,7 +19,7 @@ def allowed_file(filename, allowed_extensions):
 @jwt_required()
 def upload_image():
     """
-    Upload an image to Cloudinary
+    Upload an image to AWS S3
     ---
     tags:
       - Upload
@@ -38,7 +37,7 @@ def upload_image():
         name: folder
         type: string
         required: false
-        description: "Cloudinary folder to upload to (default: products)"
+        description: "Folder parameter (kept for backward compatibility, ignored)"
     responses:
       200:
         description: Image uploaded successfully
@@ -47,10 +46,10 @@ def upload_image():
           properties:
             secure_url:
               type: string
-              description: Cloudinary secure URL
+              description: CloudFront URL
             public_id:
               type: string
-              description: Cloudinary public ID
+              description: S3 object key
             format:
               type: string
               description: Image format
@@ -78,23 +77,19 @@ def upload_image():
         if not allowed_file(file.filename, ALLOWED_IMAGE_EXTENSIONS):
             return jsonify({'error': 'Invalid file type. Allowed types: PNG, JPG, JPEG, SVG, GIF, WebP'}), HTTPStatus.BAD_REQUEST
 
-        # Get folder parameter
-        folder = request.form.get('folder', 'products')
+        # Upload to S3
+        s3_service = get_s3_service()
+        upload_result = s3_service.upload_generic_asset(file)
         
-        # Upload to Cloudinary
-        upload_result = cloudinary.uploader.upload(
-            file,
-            folder=folder,
-            resource_type="image",
-            allowed_formats=list(ALLOWED_IMAGE_EXTENSIONS)
-        )
+        # Get file extension for format
+        file_ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
         
         return jsonify({
-            'secure_url': upload_result.get('secure_url'),
-            'public_id': upload_result.get('public_id'),
-            'format': upload_result.get('format'),
+            'secure_url': upload_result.get('url'),
+            'public_id': upload_result.get('s3_key'),
+            'format': file_ext,
             'resource_type': 'image',
-            'bytes': upload_result.get('bytes')
+            'bytes': upload_result.get('bytes', 0)
         }), HTTPStatus.OK
         
     except Exception as e:
@@ -190,7 +185,7 @@ def upload_video():
 @jwt_required()
 def delete_media():
     """
-    Delete media from Cloudinary
+    Delete media from AWS S3
     ---
     tags:
       - Upload
@@ -207,7 +202,7 @@ def delete_media():
           properties:
             public_id:
               type: string
-              description: Cloudinary public ID to delete
+              description: S3 object key or CloudFront URL to delete
     responses:
       200:
         description: Media deleted successfully
@@ -221,12 +216,13 @@ def delete_media():
         if not data or 'public_id' not in data:
             return jsonify({'error': 'public_id is required'}), HTTPStatus.BAD_REQUEST
         
-        public_id = data['public_id']
+        url_or_key = data['public_id']
         
-        # Delete from Cloudinary
-        result = cloudinary.uploader.destroy(public_id)
+        # Delete from S3
+        s3_service = get_s3_service()
+        result = s3_service.delete_generic_asset(url_or_key)
         
-        if result.get('result') == 'ok':
+        if result:
             return jsonify({'message': 'Media deleted successfully'}), HTTPStatus.OK
         else:
             return jsonify({'error': 'Failed to delete media'}), HTTPStatus.INTERNAL_SERVER_ERROR

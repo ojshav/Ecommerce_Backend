@@ -4,6 +4,7 @@ from datetime import datetime
 from enum import Enum
 import re
 from datetime import datetime, timezone
+from sqlalchemy import TypeDecorator, String
 
 from common.database import db, BaseModel
 from auth.models.merchant_document import VerificationStatus, DocumentType
@@ -21,6 +22,44 @@ class AuthProvider(Enum):
     GOOGLE = 'google'
     # Can add other providers later (Facebook, Apple, etc.)
 
+class AuthProviderType(TypeDecorator):
+    """Custom type to handle AuthProvider enum conversion."""
+    impl = String(50)
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        """Convert enum to string value when storing."""
+        if value is None:
+            return None
+        if isinstance(value, AuthProvider):
+            return value.value
+        if isinstance(value, str):
+            # Try to validate it's a valid enum value
+            try:
+                return AuthProvider(value).value
+            except ValueError:
+                return value.lower()  # Normalize to lowercase
+        return str(value).lower()
+
+    def process_result_value(self, value, dialect):
+        """Convert string value to enum when reading."""
+        if value is None:
+            return None
+        try:
+            # Try exact match first
+            return AuthProvider(value)
+        except ValueError:
+            try:
+                # Try case-insensitive match
+                value_lower = value.lower() if value else None
+                for provider in AuthProvider:
+                    if provider.value.lower() == value_lower:
+                        return provider
+            except (ValueError, TypeError, AttributeError):
+                pass
+        # Fallback to LOCAL if invalid
+        return AuthProvider.LOCAL
+
 class User(BaseModel):
     """User model for all types of users (customers, merchants, admins)."""
     __tablename__ = 'users'
@@ -36,7 +75,7 @@ class User(BaseModel):
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     is_email_verified = db.Column(db.Boolean, default=False, nullable=False)
     is_phone_verified = db.Column(db.Boolean, default=False, nullable=False)
-    auth_provider = db.Column(db.Enum(AuthProvider), default=AuthProvider.LOCAL, nullable=False)
+    auth_provider = db.Column(AuthProviderType(), default=AuthProvider.LOCAL, nullable=False)
     provider_user_id = db.Column(db.String(255), nullable=True)  # For OAuth provider user ID
     last_login = db.Column(db.DateTime, nullable=True)
     
@@ -136,8 +175,10 @@ class User(BaseModel):
     @classmethod
     def get_by_provider_id(cls, provider, provider_user_id):
         """Get user by OAuth provider ID."""
+        # Convert enum to value for query
+        provider_value = provider.value if isinstance(provider, AuthProvider) else provider
         return cls.query.filter_by(
-            auth_provider=provider,
+            auth_provider=provider_value,
             provider_user_id=provider_user_id
         ).first()
 

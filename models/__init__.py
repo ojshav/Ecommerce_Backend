@@ -7,6 +7,7 @@ from .product_stock import ProductStock
 from .product_tax import ProductTax
 from .product_shipping import ProductShipping
 from .product_meta import ProductMeta
+from .merchant_dimension_preset import MerchantDimensionPreset
 from .product_promotion import ProductPromotion
 from .product_placement import ProductPlacement
 from .subscription import SubscriptionPlan, SubscriptionHistory
@@ -46,6 +47,7 @@ __all__ = [
     'ProductTax',
     'ProductShipping',
     'ProductMeta',
+    'MerchantDimensionPreset',
     'ProductPromotion',
     'ProductPlacement',
     'SubscriptionPlan',

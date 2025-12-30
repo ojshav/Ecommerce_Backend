@@ -89,8 +89,8 @@ class MerchantDocument(BaseModel):
     id = db.Column(db.Integer, primary_key=True)
     merchant_id = db.Column(db.Integer, db.ForeignKey('merchant_profiles.id'), nullable=False, index=True)
     document_type = db.Column(db.Enum(DocumentType), nullable=False)
-    public_id = db.Column(db.String(255), nullable=False)  # Cloudinary public ID
-    file_url = db.Column(db.String(255), nullable=False)  # Cloudinary secure URL
+    public_id = db.Column(db.String(255), nullable=False)  # S3 key (previously Cloudinary public_id)
+    file_url = db.Column(db.String(255), nullable=False)  # CloudFront URL (previously Cloudinary secure_url)
     file_name = db.Column(db.String(255), nullable=False)
     file_size = db.Column(db.Integer, nullable=False)  # Size in bytes
     mime_type = db.Column(db.String(100), nullable=False)
@@ -164,9 +164,11 @@ class MerchantDocument(BaseModel):
         db.session.commit()
     
     def delete(self):
-        """Delete document and its associated Cloudinary file."""
-        from auth.utils import delete_from_cloudinary
+        """Delete document and its associated S3 file."""
+        from services.s3_service import get_s3_service
         if self.public_id:
-            delete_from_cloudinary(self.public_id)
+            # public_id now stores the S3 key instead of Cloudinary public_id
+            s3_service = get_s3_service()
+            s3_service.delete_merchant_document(self.public_id)
         db.session.delete(self)
         db.session.commit()

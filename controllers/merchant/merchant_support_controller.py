@@ -5,27 +5,20 @@ from auth.models import User, MerchantProfile
 from models.enums import TicketStatus, TicketPriority, TicketCreatorRole 
 from werkzeug.exceptions import NotFound, Forbidden, BadRequest
 from sqlalchemy import desc, asc
-import cloudinary
-import cloudinary.uploader
-import datetime 
+import datetime
+from services.s3_service import get_s3_service
 
 
-def _upload_to_cloudinary(file_to_upload, folder_name="support_attachments"):
+def _upload_support_attachment(file_to_upload, folder_name="support_attachments"):
     if not file_to_upload:
         return None
     try:
-        if not (cloudinary.config().cloud_name and cloudinary.config().api_key and cloudinary.config().api_secret):
-            current_app.logger.error("Cloudinary not configured.")
-            raise Exception("Cloudinary service is not configured.")
-        upload_result = cloudinary.uploader.upload(
-            file_to_upload,
-            folder=f"Aoin/{folder_name}", 
-            resource_type="auto"
-        )
-        return upload_result.get('secure_url')
+        s3_service = get_s3_service()
+        upload_result = s3_service.upload_support_attachment(file_to_upload, folder_name)
+        return upload_result.get('url')
     except Exception as e:
-        current_app.logger.error(f"Cloudinary upload failed: {e}")
-        raise Exception(f"Cloudinary upload failed: {str(e)}")
+        current_app.logger.error(f"S3 upload failed for support attachment: {e}")
+        raise Exception(f"File upload failed: {str(e)}")
 
 
 class MerchantSupportTicketController:
@@ -56,7 +49,7 @@ class MerchantSupportTicketController:
         image_url = None
         if image_file:
             try:
-                image_url = _upload_to_cloudinary(image_file, "support_tickets")
+                image_url = _upload_support_attachment(image_file, "support_tickets")
             except Exception as e:
                 current_app.logger.error(f"Failed to upload image for support ticket: {e}")
                 # Proceeding without image but logging error
@@ -141,7 +134,7 @@ class MerchantSupportTicketController:
         attachment_url = None
         if attachment_file:
             try:
-                attachment_url = _upload_to_cloudinary(attachment_file, "support_attachments")
+                attachment_url = _upload_support_attachment(attachment_file, "support_attachments")
             except Exception as e:
                 current_app.logger.error(f"Failed to upload attachment for support ticket message: {e}")
                 # Decide if this should be a hard fail or proceed without attachment

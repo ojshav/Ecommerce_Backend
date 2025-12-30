@@ -7,29 +7,19 @@ from werkzeug.exceptions import NotFound, Forbidden, BadRequest
 from sqlalchemy import desc, asc, or_
 from sqlalchemy.orm import joinedload, selectinload 
 import datetime
-import cloudinary
-import cloudinary.uploader 
+from services.s3_service import get_s3_service
 
-def _upload_to_cloudinary(file_to_upload, folder_name="support_attachments"):
+def _upload_support_attachment(file_to_upload, folder_name="support_attachments"):
     if not file_to_upload:
         return None
     try:
-       
-        if not (cloudinary.config().cloud_name and cloudinary.config().api_key and cloudinary.config().api_secret):
-            current_app.logger.error("Cloudinary not configured. Please set CLOUDINARY_CLOUD_NAME, API_KEY, and API_SECRET in app config.")
-            raise Exception("Cloudinary service is not configured or keys are missing.")
-            
-        upload_result = cloudinary.uploader.upload(
-            file_to_upload,
-            folder=f"Aoin/{folder_name}",  
-            resource_type="auto" 
-        )
-        current_app.logger.info(f"Cloudinary upload successful: {upload_result.get('secure_url')}")
-        return upload_result.get('secure_url')
+        s3_service = get_s3_service()
+        upload_result = s3_service.upload_support_attachment(file_to_upload, folder_name)
+        current_app.logger.info(f"S3 upload successful: {upload_result.get('url')}")
+        return upload_result.get('url')
     except Exception as e:
-        current_app.logger.error(f"Cloudinary upload failed: {str(e)}")
-        
-        raise Exception(f"Cloudinary upload failed: {str(e)}")
+        current_app.logger.error(f"S3 upload failed: {str(e)}")
+        raise Exception(f"File upload failed: {str(e)}")
 
 
 class AdminSupportTicketController:
@@ -196,7 +186,7 @@ class AdminSupportTicketController:
         attachment_url = None
         if attachment_file:
             try:
-                attachment_url = _upload_to_cloudinary(attachment_file, "admin_support_attachments")
+                attachment_url = _upload_support_attachment(attachment_file, "admin_support_attachments")
             except Exception as e:
                 current_app.logger.error(f"Admin: Failed to upload attachment for support message to ticket {ticket_uid}: {e}")
                 raise BadRequest(f"Attachment upload failed: {str(e)}")

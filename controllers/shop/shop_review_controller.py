@@ -2,8 +2,7 @@ import logging
 from flask import current_app
 from common.database import db
 from werkzeug.exceptions import BadRequest
-import cloudinary
-import cloudinary.uploader
+from services.s3_service import get_s3_service
 
 from models.enums import OrderStatusEnum
 from models.shop.shop_order import ShopOrder, ShopOrderItem
@@ -96,23 +95,20 @@ class ShopReviewController:
                     raise BadRequest('Images must be a list')
                 if len(images) > 5:
                     raise BadRequest('Maximum 5 images allowed per review')
+                s3_service = get_s3_service()
                 for idx, img_data in enumerate(images):
                     # Server-side size guard (<= 5 MB per image)
                     est_bytes = _estimate_base64_bytes(img_data if isinstance(img_data, str) else '')
                     if est_bytes > MAX_IMAGE_BYTES:
                         raise BadRequest('Each image must be smaller than 5 MB')
                     try:
-                        upload = cloudinary.uploader.upload(
-                            img_data,
-                            folder=f"shop-reviews/{review.review_id}",
-                            public_id=f"review_image_{idx}",
-                            resource_type="image",
-                        )
-                        if upload:
+                        # Upload to S3
+                        upload = s3_service.upload_review_image(img_data, review.review_id)
+                        if upload and upload.get('url'):
                             ri = ShopReviewImage(
                                 review_id=review.review_id,
-                                image_url=upload['secure_url'],
-                                public_id=upload['public_id'],
+                                image_url=upload['url'],
+                                public_id=upload['s3_key'],  # Store S3 key in public_id
                                 sort_order=idx,
                             )
                             db.session.add(ri)
@@ -178,12 +174,21 @@ class ShopReviewController:
             if not review:
                 raise BadRequest('Review not found or does not belong to user')
 
+            s3_service = get_s3_service()
             for image in review.images:
                 if getattr(image, 'public_id', None):
                     try:
-                        cloudinary.uploader.destroy(image.public_id, resource_type="image")
+                        s3_service.delete_review_image(image.public_id)
+                        current_app.logger.info(f"Successfully deleted shop review image {image.public_id} from S3.")
                     except Exception as e:
-                        current_app.logger.error(f"Failed to delete image {image.public_id} from Cloudinary: {e}")
+                        current_app.logger.error(f"Failed to delete shop review image {image.public_id} from S3: {e}")
+                elif getattr(image, 'image_url', None):
+                    # Fallback: try to delete using image_url
+                    try:
+                        s3_service.delete_review_image(image.image_url)
+                        current_app.logger.info(f"Successfully deleted shop review image from S3 using URL.")
+                    except Exception as e:
+                        current_app.logger.error(f"Failed to delete shop review image from S3 using URL: {e}")
 
             db.session.delete(review)
             db.session.commit()

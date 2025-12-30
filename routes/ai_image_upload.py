@@ -1,12 +1,11 @@
 """
 Temporary image upload endpoint for AI Product Description feature
-Uploads images to Cloudinary and returns URLs for AI processing
+Uploads images to AWS S3 and returns URLs for AI processing
 """
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required
 from werkzeug.utils import secure_filename
-import cloudinary
-import cloudinary.uploader
+from services.s3_service import get_s3_service
 from http import HTTPStatus
 from auth.utils import merchant_role_required
 
@@ -24,8 +23,8 @@ def allowed_file(filename):
 @merchant_role_required
 def upload_temp_image():
     """
-    Upload temporary image to Cloudinary for AI processing
-    Returns the Cloudinary URL and public_id that can be used by the AI service
+    Upload temporary image to AWS S3 for AI processing
+    Returns the CloudFront URL and S3 key that can be used by the AI service
     """
     try:
         # Check if file is present in request
@@ -42,25 +41,21 @@ def upload_temp_image():
         if not allowed_file(file.filename):
             return jsonify({'error': 'Invalid file type. Allowed: PNG, JPG, JPEG, GIF, WEBP'}), HTTPStatus.BAD_REQUEST
         
-        # Upload to Cloudinary in a dedicated folder for AI temp images
-        upload_result = cloudinary.uploader.upload(
-            file,
-            folder='ai_temp_images',
-            resource_type="image",
-            allowed_formats=list(ALLOWED_EXTENSIONS)
-        )
+        # Upload to S3
+        s3_service = get_s3_service()
+        upload_result = s3_service.upload_ai_temp_image(file)
         
-        # Return both url and image_url for compatibility
-        secure_url = upload_result.get('secure_url')
+        # Get file extension for format
+        file_ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
         
         return jsonify({
             'success': True,
-            'url': secure_url,
-            'image_url': secure_url,
-            'public_id': upload_result.get('public_id'),
-            'format': upload_result.get('format'),
-            'bytes': upload_result.get('bytes'),
-            'message': 'Image uploaded successfully to Cloudinary'
+            'url': upload_result.get('url'),
+            'image_url': upload_result.get('url'),
+            'public_id': upload_result.get('s3_key'),
+            'format': file_ext,
+            'bytes': upload_result.get('bytes', 0),
+            'message': 'Image uploaded successfully to S3'
         }), HTTPStatus.OK
         
     except Exception as e:
@@ -70,31 +65,27 @@ def upload_temp_image():
             'details': str(e)
         }), HTTPStatus.INTERNAL_SERVER_ERROR
 
-@ai_image_upload_bp.route('/api/merchant-dashboard/delete-temp-image/<public_id>', methods=['DELETE'])
+@ai_image_upload_bp.route('/api/merchant-dashboard/delete-temp-image/<path:public_id>', methods=['DELETE'])
 @jwt_required()
 @merchant_role_required
 def delete_temp_image(public_id):
     """
-    Delete temporary uploaded image from Cloudinary
-    Note: public_id should be URL-encoded if it contains slashes (e.g., ai_temp_images/xyz)
+    Delete temporary uploaded image from AWS S3
+    Note: public_id can be S3 key or CloudFront URL
     """
     try:
-        # If the public_id doesn't contain the folder prefix, add it
-        if not public_id.startswith('ai_temp_images/'):
-            public_id = f'ai_temp_images/{public_id}'
+        # Delete from S3
+        s3_service = get_s3_service()
+        result = s3_service.delete_ai_temp_image(public_id)
         
-        # Delete from Cloudinary
-        result = cloudinary.uploader.destroy(public_id, resource_type='image')
-        
-        if result.get('result') == 'ok':
+        if result:
             return jsonify({
                 'success': True,
-                'message': 'Image deleted successfully from Cloudinary'
+                'message': 'Image deleted successfully from S3'
             }), HTTPStatus.OK
         else:
             return jsonify({
-                'error': 'File not found or already deleted',
-                'result': result.get('result')
+                'error': 'File not found or already deleted'
             }), HTTPStatus.NOT_FOUND
             
     except Exception as e:

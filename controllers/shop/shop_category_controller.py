@@ -109,17 +109,19 @@ class ShopCategoryController:
                             }), HTTPStatus.BAD_REQUEST
                         
                         try:
-                            # Upload to Cloudinary
-                            upload_result = cloudinary.uploader.upload(
-                                icon_file,
-                                folder="category_icons",
-                                resource_type="auto",
-                                transformation=[
-                                    {'width': 200, 'height': 200, 'crop': 'fit', 'quality': 'auto'}
-                                ]
-                            )
-                            icon_url = upload_result.get('secure_url')
+                            # Upload to S3
+                            from services.s3_service import get_s3_service
+                            s3_service = get_s3_service()
+                            upload_result = s3_service.upload_generic_asset(icon_file)
+                            icon_url = upload_result.get('url')
+                            if not icon_url:
+                                return jsonify({
+                                    'status': 'error',
+                                    'message': 'Failed to upload image - no URL returned'
+                                }), HTTPStatus.INTERNAL_SERVER_ERROR
                         except Exception as upload_error:
+                            from flask import current_app
+                            current_app.logger.error(f"Category icon upload failed: {str(upload_error)}")
                             return jsonify({
                                 'status': 'error',
                                 'message': f'Failed to upload image: {str(upload_error)}'
@@ -263,16 +265,11 @@ class ShopCategoryController:
                             }), HTTPStatus.BAD_REQUEST
                         
                         try:
-                            # Upload to Cloudinary
-                            upload_result = cloudinary.uploader.upload(
-                                icon_file,
-                                folder="category_icons",
-                                resource_type="auto",
-                                transformation=[
-                                    {'width': 200, 'height': 200, 'crop': 'fit', 'quality': 'auto'}
-                                ]
-                            )
-                            icon_url = upload_result.get('secure_url')
+                            # Upload to S3
+                            from services.s3_service import get_s3_service
+                            s3_service = get_s3_service()
+                            upload_result = s3_service.upload_generic_asset(icon_file)
+                            icon_url = upload_result.get('url')
                             data['icon_url'] = icon_url
                         except Exception as upload_error:
                             return jsonify({

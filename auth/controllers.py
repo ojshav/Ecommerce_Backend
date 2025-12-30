@@ -119,26 +119,63 @@ def register_merchant(data):
 def login_user(data):
     """Login a user with email and password."""
     try:
-        login_email = data['email']
-        password = data['password']
+        login_email = data.get('email', '').strip().lower()
+        password = data.get('password', '')
         is_business_login = 'business_email' in data and data['business_email'] is True
+        
+        current_app.logger.info(f"Login attempt - Email: {login_email}, Is Business Login: {is_business_login}")
+        
         user_to_check = None
+        merchant_profile = None
+        
         if is_business_login:
+            current_app.logger.info(f"Business login attempt for email: {login_email}")
             merchant_profile = MerchantProfile.query.filter_by(business_email=login_email).first()
+            
             if merchant_profile:
+                current_app.logger.info(f"Merchant profile found - ID: {merchant_profile.id}, User ID: {merchant_profile.user_id}")
                 user_to_check = User.get_by_id(merchant_profile.user_id)
+                if user_to_check:
+                    current_app.logger.info(f"User found for merchant - User ID: {user_to_check.id}, Role: {user_to_check.role.value if user_to_check.role else 'None'}, Active: {user_to_check.is_active}, Email Verified: {user_to_check.is_email_verified}")
+                else:
+                    current_app.logger.warning(f"User not found for merchant profile ID: {merchant_profile.id}, User ID: {merchant_profile.user_id}")
+            else:
+                current_app.logger.warning(f"Merchant profile not found for business_email: {login_email}")
         else:
+            current_app.logger.info(f"Regular login attempt for email: {login_email}")
             user_to_check = User.get_by_email(login_email)
-            # Prevent merchant login via regular login
-            if user_to_check and user_to_check.role == UserRole.MERCHANT:
-                return {"error": "Merchants must sign in through the merchant dashboard."}, 403
-        if not user_to_check or not user_to_check.check_password(password):
+            if user_to_check:
+                current_app.logger.info(f"User found - User ID: {user_to_check.id}, Role: {user_to_check.role.value if user_to_check.role else 'None'}, Active: {user_to_check.is_active}, Email Verified: {user_to_check.is_email_verified}")
+                # Prevent merchant login via regular login
+                if user_to_check.role == UserRole.MERCHANT:
+                    current_app.logger.warning(f"Merchant attempted to login via regular login - User ID: {user_to_check.id}")
+                    return {"error": "Merchants must sign in through the merchant dashboard."}, 403
+            else:
+                current_app.logger.warning(f"User not found for email: {login_email}")
+        
+        if not user_to_check:
+            current_app.logger.error(f"Login failed - User not found for email: {login_email}, Is Business Login: {is_business_login}")
             return {"error": "Invalid email or password"}, 401
+        
+        # Check password
+        password_check_result = user_to_check.check_password(password)
+        current_app.logger.info(f"Password check result for User ID {user_to_check.id}: {password_check_result}")
+        
+        if not password_check_result:
+            current_app.logger.error(f"Login failed - Invalid password for User ID: {user_to_check.id}, Email: {login_email}")
+            return {"error": "Invalid email or password"}, 401
+        
         if not user_to_check.is_active:
+            current_app.logger.warning(f"Login failed - Account disabled for User ID: {user_to_check.id}, Email: {login_email}")
             return {"error": "Account is disabled"}, 403
+        
         # Email verification check
         if not user_to_check.is_email_verified:
+            current_app.logger.warning(f"Login failed - Email not verified for User ID: {user_to_check.id}, Email: {login_email}")
             return {"error_code": "EMAIL_NOT_VERIFIED", "message": "Please verify your email address to log in.", "email": user_to_check.email}, 403
+        
+        current_app.logger.info(f"Login successful - User ID: {user_to_check.id}, Email: {login_email}, Role: {user_to_check.role.value if user_to_check.role else 'None'}")
+        
         user_to_check.update_last_login()
         additional_claims = {"role": user_to_check.role.value}
         access_token = create_access_token(identity=str(user_to_check.id), additional_claims=additional_claims)
@@ -158,8 +195,8 @@ def login_user(data):
             }
         }, 200
     except Exception as e:
-        current_app.logger.error(f"Login error: {str(e)}")
-        return {"error": "Login failed"}, 500
+        current_app.logger.error(f"Login error - Email: {data.get('email', 'N/A')}, Is Business Login: {data.get('business_email', False)}, Error: {str(e)}", exc_info=True)
+        return {"error": "Login failed", "details": str(e) if current_app.debug else None}, 500
     
 def refresh_access_token(token):
     """Refresh access token using refresh token."""
@@ -199,10 +236,23 @@ def logout_user(token):
 def verify_email(token):
     """Verify user email with token."""
     try:
-        # Find verification token
-        verification = EmailVerification.get_by_token(token)
+        # Find verification token - query directly to handle is_used check manually
+        verification = EmailVerification.query.filter_by(token=token).first()
+        
         if not verification:
             return {"error": "Invalid verification token"}, 400
+        
+        # If token is already used, check if user is verified
+        if verification.is_used:
+            user = User.get_by_id(verification.user_id)
+            if user and user.is_email_verified:
+                # Idempotency: Return success if already verified
+                return {
+                    "message": "Email already verified",
+                    "user_id": user.id
+                }, 200
+            else:
+                return {"error": "Verification token already used"}, 400
         
         if verification.expires_at < datetime.utcnow():
             return {"error": "Verification token expired"}, 400
@@ -216,16 +266,16 @@ def verify_email(token):
         
         # Mark verification token as used
         verification.is_used = True
-        db.session.commit()  # Commit both changes
         
         # If user is a merchant, update merchant verification status
         if user.role == UserRole.MERCHANT:
             merchant_profile = MerchantProfile.get_by_user_id(user.id)
             if merchant_profile:
-                merchant_profile.verification_status = 'email_verified'
-                merchant_profile.is_verified = True
+                # Only update if not already verified to avoid overwriting other statuses
+                if merchant_profile.verification_status != 'approved': 
+                    merchant_profile.verification_status = 'email_verified'
+                    merchant_profile.is_verified = True
         
-        verification.use()
         db.session.commit()
         
         return {
@@ -233,6 +283,7 @@ def verify_email(token):
             "user_id": user.id
         }, 200
     except Exception as e:
+        db.session.rollback()
         current_app.logger.error(f"Email verification error: {str(e)}")
         return {"error": "Email verification failed"}, 500
     
@@ -526,19 +577,25 @@ def upload_profile_image(user_id):
         user = User.get_by_id(user_id)
         if not user:
             return {"error": "User not found"}, 404
-        cloudinary.config(
-            cloud_name=current_app.config.get('CLOUDINARY_CLOUD_NAME'),
-            api_key=current_app.config.get('CLOUDINARY_API_KEY'),
-            api_secret=current_app.config.get('CLOUDINARY_API_SECRET'),
-            secure=True
-        )
-        upload_result = cloudinary.uploader.upload(
-            file, folder="profile_images", public_id=str(user.id),
-            overwrite=True, resource_type='image'
-        )
-        secure_url = upload_result.get('secure_url')
+        
+        # Delete old profile image from S3 if it exists
+        if user.profile_img:
+            try:
+                from services.s3_service import get_s3_service
+                s3_service = get_s3_service()
+                s3_service.delete_profile_image(user.profile_img)
+            except Exception as e:
+                current_app.logger.warning(f"Failed to delete old profile image from S3: {str(e)}")
+        
+        # Upload to S3
+        from services.s3_service import get_s3_service
+        s3_service = get_s3_service()
+        upload_result = s3_service.upload_profile_image(file, user_id)
+        
+        secure_url = upload_result.get('url')
         if not secure_url:
-            return {"error": "Failed to get secure URL from upload result"}, 500
+            return {"error": "Failed to get URL from S3 upload result"}, 500
+        
         user.profile_img = secure_url
         db.session.commit()
         redis_client = get_redis_client()

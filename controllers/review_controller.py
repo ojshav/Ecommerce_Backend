@@ -4,8 +4,7 @@ from models.order import Order, OrderItem
 from models.product import Product
 from models.enums import OrderStatusEnum, MediaType
 from common.database import db
-import cloudinary
-import cloudinary.uploader
+from services.s3_service import get_s3_service
 from datetime import datetime, timezone
 import logging
 
@@ -98,22 +97,18 @@ class ReviewController:
             
             # Handle images if provided
             if 'images' in review_data and review_data['images']:
+                s3_service = get_s3_service()
                 for index, image_data in enumerate(review_data['images']):
                     try:
-                        # Upload to Cloudinary
-                        upload_result = cloudinary.uploader.upload(
-                            image_data,
-                            folder=f"reviews/{review.review_id}",
-                            public_id=f"review_image_{index}",
-                            resource_type="image"
-                        )
+                        # Upload to S3
+                        upload_result = s3_service.upload_review_image(image_data, review.review_id)
                         
-                        if upload_result:
+                        if upload_result and upload_result.get('url'):
                             # Create review image record
                             review_image = ReviewImage(
                                 review_id=review.review_id,
-                                image_url=upload_result['secure_url'],
-                                public_id=upload_result['public_id'],
+                                image_url=upload_result['url'],
+                                public_id=upload_result['s3_key'],  # Store S3 key in public_id
                                 sort_order=index
                             )
                             review.images.append(review_image)
@@ -231,17 +226,22 @@ class ReviewController:
             if not review:
                 raise ValueError("Review not found or does not belong to user")
                 
-            # Delete images from Cloudinary
+            # Delete images from S3
+            s3_service = get_s3_service()
             for image in review.images:
                 if hasattr(image, 'public_id') and image.public_id:
                     try:
-                        cloudinary.uploader.destroy(
-                            image.public_id,
-                            resource_type="image"
-                        )
-                        current_app.logger.info(f"Successfully deleted {image.public_id} from Cloudinary.")
+                        s3_service.delete_review_image(image.public_id)
+                        current_app.logger.info(f"Successfully deleted review image {image.public_id} from S3.")
                     except Exception as e:
-                        current_app.logger.error(f"Failed to delete image {image.public_id} from Cloudinary: {e}")
+                        current_app.logger.error(f"Failed to delete review image {image.public_id} from S3: {e}")
+                elif hasattr(image, 'image_url') and image.image_url:
+                    # Fallback: try to delete using image_url
+                    try:
+                        s3_service.delete_review_image(image.image_url)
+                        current_app.logger.info(f"Successfully deleted review image from S3 using URL.")
+                    except Exception as e:
+                        current_app.logger.error(f"Failed to delete review image from S3 using URL: {e}")
                     
             # Delete review
             db.session.delete(review)

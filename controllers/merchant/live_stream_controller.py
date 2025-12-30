@@ -7,6 +7,8 @@ from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timedelta
 import cloudinary
 import cloudinary.uploader
+from services.s3_service import get_s3_service
+from flask import current_app
 import requests
 from dateutil import parser
 import pytz
@@ -15,9 +17,20 @@ from models.live_stream import StreamStatus
 
 class MerchantLiveStreamController:
     @staticmethod
+    def upload_thumbnail_to_s3(file):
+        """Upload live stream thumbnail to S3"""
+        try:
+            s3_service = get_s3_service()
+            upload_result = s3_service.upload_generic_asset(file)
+            return upload_result['url'], upload_result['s3_key']
+        except Exception as e:
+            current_app.logger.error(f"Failed to upload live stream thumbnail to S3: {str(e)}")
+            raise Exception(f"Failed to upload thumbnail: {str(e)}")
+    
+    @staticmethod
     def upload_thumbnail_to_cloudinary(file):
-        result = cloudinary.uploader.upload(file, folder="live_stream_thumbnails")
-        return result['secure_url'], result['public_id']
+        """Legacy method - kept for backward compatibility but redirects to S3"""
+        return MerchantLiveStreamController.upload_thumbnail_to_s3(file)
 
     @staticmethod
     def schedule_youtube_live_event(access_token, title, description, scheduled_time, return_livestream_id=False, allow_embedding=True):

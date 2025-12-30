@@ -437,18 +437,26 @@ def login():
         description: Internal server error
     """
     try:
+        current_app.logger.info(f"Login request received - IP: {request.remote_addr}, User-Agent: {request.headers.get('User-Agent', 'Unknown')}")
+        
         # Validate request data
         schema = LoginSchema()
         data = schema.load(request.json)
+        
+        current_app.logger.info(f"Login data validated - Email: {data.get('email', 'N/A')}, Business Email: {data.get('business_email', 'N/A')}, Has Password: {bool(data.get('password'))}")
         
         # Check if this is a business email or regular email login
         if data.get('business_email'):
             data['email'] = data.get('business_email')
             # Flag to indicate this is a business email login
             data['business_email'] = True
+            current_app.logger.info(f"Business email login detected - Email: {data['email']}")
         
         # Login user
         response, status_code = login_user(data)
+        
+        if status_code != 200:
+            current_app.logger.warning(f"Login failed - Status: {status_code}, Response: {response}")
         
         if status_code == 200:
             # Get merchant profile if user is a merchant
@@ -480,7 +488,11 @@ def login():
         
         return jsonify(response), status_code
     except ValidationError as e:
+        current_app.logger.warning(f"Login validation error - {e.messages}")
         return jsonify({"error": "Validation error", "details": e.messages}), 400
+    except Exception as e:
+        current_app.logger.error(f"Login route error: {str(e)}", exc_info=True)
+        return jsonify({"error": "Login failed", "details": str(e) if current_app.debug else None}), 500
     
 @auth_bp.route('/refresh', methods=['POST'])
 def refresh():

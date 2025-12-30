@@ -7,7 +7,8 @@ from auth.models.models import MerchantProfile
 from common.database import db
 from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timezone
-import cloudinary 
+import cloudinary
+from services.s3_service import get_s3_service 
 
 class MerchantProductMediaController:
     @staticmethod
@@ -78,12 +79,13 @@ class MerchantProductMediaController:
             raise ValueError("Failed to create product media due to a data conflict.") from e
         except Exception as e:
             db.session.rollback()
-            if cloudinary_public_id: 
-                 try:
-                    resource_type_for_cloudinary = "image" if media_type_enum == MediaType.IMAGE else "video"
-                    cloudinary.uploader.destroy(cloudinary_public_id, resource_type=resource_type_for_cloudinary)
-                 except Exception as cloud_e:
-                    current_app.logger.error(f"Failed to delete orphaned Cloudinary file {cloudinary_public_id} after DB error: {cloud_e}")
+            # Clean up uploaded file if DB save fails (both images and videos use S3 now)
+            s3_key = data.get('public_id', None)
+            if s3_key:
+                try:
+                    get_s3_service().delete_product_media(s3_key)
+                except Exception as s3_e:
+                    current_app.logger.error(f"Failed to delete orphaned S3 file {s3_key} after DB error: {s3_e}")
             raise RuntimeError(f"An unexpected error occurred while creating product media: {e}") from e
 
     @staticmethod
@@ -97,14 +99,25 @@ class MerchantProductMediaController:
             description=f"Product media with ID {mid} not found or you do not have permission to delete it."
         )
         
-        # Attempt Cloudinary deletion first if we have a public_id
+        # Delete from S3 (both images and videos now use S3)
         if hasattr(pm, 'public_id') and pm.public_id:
-            try:
-                resource_type_for_cloudinary = "image" if pm.type == MediaType.IMAGE else "video"
-                cloudinary.uploader.destroy(pm.public_id, resource_type=resource_type_for_cloudinary)
-                current_app.logger.info(f"Successfully deleted {pm.public_id} from Cloudinary.")
-            except Exception as e:
-                current_app.logger.error(f"Failed to delete media {pm.public_id} from Cloudinary: {e}")
+            # Delete from S3 using the stored S3 key (in public_id field)
+            # Also try URL as fallback
+            s3_key = pm.public_id
+            s3_url = pm.url
+            
+            # Try deleting using S3 key first, then URL
+            deleted = False
+            if s3_key and s3_key.startswith('products/'):
+                deleted = get_s3_service().delete_product_media(s3_key)
+            
+            if not deleted and s3_url:
+                # Fallback: try extracting key from URL
+                deleted = get_s3_service().delete_product_media(s3_url)
+            
+            if not deleted:
+                media_type = 'image' if pm.type == MediaType.IMAGE else 'video'
+                current_app.logger.warning(f"Failed to delete product {media_type} from S3: {s3_key or s3_url}")
 
         # Hard delete the media row from the database
         try:

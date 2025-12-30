@@ -303,7 +303,6 @@ def create_profile():
 @merchants_bp.route('/profile', methods=['GET'])
 @jwt_required()
 @merchant_role_required
-@cache_response(timeout=60, key_prefix='merchant_profile')
 def get_profile():
     """
     Get merchant profile.
@@ -386,44 +385,49 @@ def get_profile():
       404:
         description: Merchant profile not found
     """
-    merchant_id = get_jwt_identity()
-    merchant_profile = MerchantProfile.get_by_user_id(merchant_id)
-    
-    if not merchant_profile:
-        return jsonify({"error": "Merchant profile not found"}), 404
-    
-    return jsonify({
-        "profile": {
-            "business_name": merchant_profile.business_name,
-            "business_description": merchant_profile.business_description,
-            "business_email": merchant_profile.business_email,
-            "business_phone": merchant_profile.business_phone,
-            "business_address": merchant_profile.business_address,
-            "country_code": merchant_profile.country_code,
-            "state_province": merchant_profile.state_province,
-            "city": merchant_profile.city,
-            "postal_code": merchant_profile.postal_code,
-            "gstin": merchant_profile.gstin,
-            "pan_number": merchant_profile.pan_number,
-            "tax_id": merchant_profile.tax_id,
-            "vat_number": merchant_profile.vat_number,
-            "sales_tax_number": merchant_profile.sales_tax_number,
-            "bank_account_number": merchant_profile.bank_account_number,
-            "bank_name": merchant_profile.bank_name,
-            "bank_branch": merchant_profile.bank_branch,
-            "bank_ifsc_code": merchant_profile.bank_ifsc_code,
-            "bank_swift_code": merchant_profile.bank_swift_code,
-            "bank_routing_number": merchant_profile.bank_routing_number,
-            "bank_iban": merchant_profile.bank_iban,
-            "is_verified": merchant_profile.is_verified,
-            "verification_status": merchant_profile.verification_status.value,
-            "verification_submitted_at": merchant_profile.verification_submitted_at.isoformat() if merchant_profile.verification_submitted_at else None,
-            "verification_completed_at": merchant_profile.verification_completed_at.isoformat() if merchant_profile.verification_completed_at else None,
-            "verification_notes": merchant_profile.verification_notes,
-            "required_documents": merchant_profile.required_documents,
-            "submitted_documents": merchant_profile.submitted_documents
-        }
-    }), 200
+    try:
+        merchant_id = get_jwt_identity()
+        merchant_profile = MerchantProfile.get_by_user_id(merchant_id)
+        
+        if not merchant_profile:
+            return jsonify({"error": "Merchant profile not found"}), 404
+        
+        return jsonify({
+            "profile": {
+                "business_name": merchant_profile.business_name,
+                "business_description": merchant_profile.business_description,
+                "business_email": merchant_profile.business_email,
+                "business_phone": merchant_profile.business_phone,
+                "business_address": merchant_profile.business_address,
+                "country_code": merchant_profile.country_code,
+                "state_province": merchant_profile.state_province,
+                "city": merchant_profile.city,
+                "postal_code": merchant_profile.postal_code,
+                "gstin": merchant_profile.gstin,
+                "pan_number": merchant_profile.pan_number,
+                "tax_id": merchant_profile.tax_id,
+                "vat_number": merchant_profile.vat_number,
+                "sales_tax_number": merchant_profile.sales_tax_number,
+                "bank_account_number": merchant_profile.bank_account_number,
+                "bank_name": merchant_profile.bank_name,
+                "bank_branch": merchant_profile.bank_branch,
+                "bank_ifsc_code": merchant_profile.bank_ifsc_code,
+                "bank_swift_code": merchant_profile.bank_swift_code,
+                "bank_routing_number": merchant_profile.bank_routing_number,
+                "bank_iban": merchant_profile.bank_iban,
+                "is_verified": merchant_profile.is_verified,
+                "verification_status": merchant_profile.verification_status.value,
+                "verification_submitted_at": merchant_profile.verification_submitted_at.isoformat() if merchant_profile.verification_submitted_at else None,
+                "verification_completed_at": merchant_profile.verification_completed_at.isoformat() if merchant_profile.verification_completed_at else None,
+                "verification_notes": merchant_profile.verification_notes,
+                "required_documents": merchant_profile.required_documents,
+                "submitted_documents": merchant_profile.submitted_documents
+            }
+        }), 200
+    except Exception as e:
+        from flask import current_app
+        current_app.logger.error(f"Error fetching merchant profile: {str(e)}", exc_info=True)
+        return jsonify({"error": f"Failed to fetch profile: {str(e)}"}), 500
 
 @merchants_bp.route('/profile', methods=['PUT'])
 @jwt_required()
